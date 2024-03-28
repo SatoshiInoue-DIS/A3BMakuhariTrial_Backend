@@ -1,0 +1,2 @@
+# A3BMakuhariTrial_Backend
+RAGチャットボットにドキュメントを取り込む管理アプリ
