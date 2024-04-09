@@ -1,0 +1,31 @@
+.SideNav {
+    /* position: fixed; */
+    background-color: #66AFB3;
+    width: 25vh;
+    text-align: center;
+    height: 80vh;
+}
+
+.SideNavList {
+    list-style: none;
+    padding-left: 0;
+}
+
+.SideNavPageLinkActive {
+    color: #fff;
+    text-decoration: none;
+}
+
+.SideNavPageLink {
+    color: #fff;
+    text-decoration: none;
+    opacity: 0.75;
+
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    transition-duration: 500ms;
+    transition-property: opacity;
+}
+
+.SideNavPageLink:hover {
+    opacity: 1;
+}

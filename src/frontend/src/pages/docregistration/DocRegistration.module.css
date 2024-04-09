@@ -1,0 +1,35 @@
+.container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+}
+
+.containerTable {
+    margin: 10px 10px;
+    background-color: #E9F3FF;
+    border-radius: 15px;
+    box-shadow: 1px 1px 1px #000;
+    margin: 10px;
+    height: 100%;
+}
+
+.commandsContainer {
+    height: 30vh;
+    margin: 0 20px;
+}
+ .titleAndSelectArea {
+    display: flex;
+    justify-content: space-between;
+}
+
+.registrationDeletionArea {
+    text-align: right;
+}
+
+.DocRegistrationButtonArea {
+    display: block;
+    width: 150px;
+    margin: 0 auto;
+
+}

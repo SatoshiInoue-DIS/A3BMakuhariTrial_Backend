@@ -1,0 +1,30 @@
+.modalPanel {
+    position: relative;
+    width: 100%;
+    background-color: #F1F3F6;
+    border-radius: 30px;
+    overflow: hidden;
+    padding: 30px;
+}
+.modalPanelHeader {
+    display: flex;
+    justify-content: space-between;
+}
+.dropArea {
+    border: 1px dashed #000;
+    border-radius: 15px;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.dropAreaTop {
+    text-align: center;
+}
+
+.dropAreaNotes>p {
+    line-height: 10px;
+}
+
+.FileUploadBtnArea {
+    text-align: center;
+    margin: 30px 70px 0
+}

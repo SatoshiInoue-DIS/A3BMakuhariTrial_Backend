@@ -8,7 +8,7 @@
             "name": "Python デバッガー: 現在のファイル",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/backend/app.py",
+            "program": "${workspaceFolder}/src/backend/app.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "envFile": "",
@@ -19,7 +19,7 @@
             "request": "launch",
             "name": "Next.js Client",
             "url": "http://localhost:3000",
-            "webRoot": "${workspaceFolder}/frontend"
+            "webRoot": "${workspaceFolder}/src/frontend"
         }
     ]
 }
