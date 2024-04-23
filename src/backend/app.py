@@ -1,13 +1,18 @@
 import os
-import io
+import io 
 import glob
 import html
 import re
 import time
+import pypdf
 
+import openai
+
+from io import BytesIO
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_cors import CORS
+from pypdf import PdfReader, PdfWriter
 
 import asyncio
 
@@ -21,13 +26,14 @@ from azure.search.documents.indexes import SearchIndexerClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import *
 from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.ai.documentintelligence import DocumentIntelligenceClient
+from azure.ai.formrecognizer import FormRecognizerClient
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
+
+
 
 # .envファイルの内容を読み込見込む
 load_dotenv()
-
-app = Flask(__name__)
-CORS(app)  # CORS設定を追加
 
 MAX_SECTION_LENGTH = 1000
 SENTENCE_SEARCH_LIMIT = 100
@@ -49,6 +55,11 @@ AZURE_FORM_RECOGNIZER_KEY=os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID")
 
 azure_credential = DefaultAzureCredential()
+search_client = SearchClient(
+    endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
+    index_name=AZURE_SEARCH_INDEX,
+    credential=AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
+)
 # BlobServiceClientの作成
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
 # こっちでもいい
@@ -64,53 +75,52 @@ search_creds = AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
 formrecognizer_creds = search_creds
 default_creds = ManagedIdentityCredential()
 
-local_file_path = r"C:\Users\sinou\GitManagement\A3BMakuhariTrial_Backend\data\test.pdf"
-# local_file_path = r"C:"
-blob_name = "test.pdf"
+index_client = SearchIndexClient(
+    endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
+    credential=azure_credential
+)
 
 # コンテナーの作成
 # container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
 # container_client.create_container()
 
+# configure_azure_monitor()
+app = Flask(__name__)
+CORS(app)  # CORS設定を追加
+FlaskInstrumentor().instrument_app(app)
+
+
 # Blobのアップロード
-blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name)
-with open(local_file_path, "rb") as data:
-    blob_client.upload_blob(data, overwrite=True)
+# blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name)
+# with open(local_file_path, "rb") as data:
+#     blob_client.upload_blob(data, overwrite=True)
 
-print("ファイルがアップロードされました。")
+# print("ファイルがアップロードされました。")
 
+# インデックスを作成するメソッド
+def create_search_index():
+    if AZURE_SEARCH_INDEX not in index_client.list_index_names():
+        index = SearchIndex(
+            name=AZURE_SEARCH_INDEX,
+            fields=[
+                SimpleField(name="id", type="Edm.String", key=True),
+                SearchableField(name="content", type="Edm.String", analyzer_name="ja.microsoft"),
+                SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
+                SimpleField(name="sourcepage", type="Edm.String", filterable=True, facetable=True),
+                SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True)
+            ],
+            semantic_settings=SemanticSettings(
+                configurations=[SemanticConfiguration(
+                    name='default',
+                    prioritized_fields=PrioritizedFields(
+                        title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
+        )
+        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）の作成しました。")
+        index_client.create_index(index)
+    else:
+        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）はすでに存在します。")
 
-
-
-
-
-
-index_client = SearchIndexClient(
-    endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
-    credential=azure_credential
-)
-if AZURE_SEARCH_INDEX not in index_client.list_index_names():
-    index = SearchIndex(
-        name=AZURE_SEARCH_INDEX,
-        fields=[
-            SimpleField(name="id", type="Edm.String", key=True),
-            SearchableField(name="content", type="Edm.String", analyzer_name="ja.microsoft"),
-            SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
-            SimpleField(name="sourcepage", type="Edm.String", filterable=True, facetable=True),
-            SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True)
-        ],
-        semantic_settings=SemanticSettings(
-            configurations=[SemanticConfiguration(
-                name='default',
-                prioritized_fields=PrioritizedFields(
-                    title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
-    )
-    if True: print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）の作成")
-    index_client.create_index(index)
-else:
-    if True: print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）はすでに存在します。")
-
-print("ファイルを処理しています...")
+    # print("ファイルを処理しています...")
 
 
 # ファイル名とページ番号からBlobの名前を生成します。
@@ -122,28 +132,38 @@ def blob_name_from_file_page(filename, page = 0):
 
 
 
-#  PDFからテキストを抽出します。ローカルのPDFパーサー（PyPdf）またはAzure Form Recognizerサービスを使用します。
-def get_document_text(filename):
+#  PDFからテキストを抽出します。Azure Form Recognizerサービスを使用します。
+def get_document_text(upload_url):
     offset = 0
     page_map = []
-    # if args.localpdfparser:
-    #     reader = PdfReader(filename)
-    #     pages = reader.pages
-    #     for page_num, p in enumerate(pages):
-    #         page_text = p.extract_text()
-    #         page_map.append((page_num, offset, page_text))
-    #         offset += len(page_text)
-    # else:
-    print(f"Azure Form Recognizer を使用して '{filename}' からテキストを抽出します")
+    # filename = upload_file.filename
+    # print(f"Azure Form Recognizer を使用して '{filename}' からテキストを抽出します")
     # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
     form_recognizer_client = DocumentAnalysisClient(
         endpoint=f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/",
         credential=formrecognizer_creds,
-        headers={"x-ms-useragent": "azure-search-chat-demo/1.0.0"}
+        # 適当
+        # headers={"x-ms-useragent": "azure-search-chat-demo/1.0.0"}
     )
-    with open(filename, "rb") as f:
-        poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = f)
+    # form_recognizer_client2 = FormRecognizerClient(f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/", formrecognizer_creds)
+    # # PDFを読み込み
+    # with open(upload_file, 'rb') as f:
+    #     content = f.read()
+    #     # OCR実行
+    #     poller = form_recognizer_client2.begin_recognize_content(content, content_type='application/pdf')
+
+    # # 結果の取り出し
+    # pages = poller.result()
+
+    # file_bytes_io = BytesIO(upload_file)
+    # file_bytes = file_bytes_io.getvalue()
+    with open(upload_url, "rb") as f:
+        # ファイルの位置を先頭に移動する
+        f.seek(0)
+        form = f.read()
+        poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = form)
     form_recognizer_results = poller.result()
+    # print ("ドキュメントにはコンテンツが含まれています: ", form_recognizer_results.content)
 
     for page_num, page in enumerate(form_recognizer_results.pages):
         tables_on_page = [table for table in form_recognizer_results.tables if table.bounding_regions[0].page_number == page_num + 1]
@@ -208,7 +228,7 @@ def create_sections(filename, page_map):
 def split_text(page_map):
     SENTENCE_ENDINGS = [".", "!", "?"]
     WORDS_BREAKS = [",", ";", ":", " ", "(", ")", "[", "]", "{", "}", "\t", "\n"]
-    print(f"「'{filename}'」をセクションに分割しています")
+    # print(f"「'{filename}'」をセクションに分割しています")
 
     def find_page(offset):
         l = len(page_map)
@@ -221,48 +241,52 @@ def split_text(page_map):
     length = len(all_text)
     start = 0
     end = length
-    while start + SECTION_OVERLAP < length:
-        last_word = -1
-        end = start + MAX_SECTION_LENGTH
+    if start + SECTION_OVERLAP < length:
+        while start + SECTION_OVERLAP < length:
+            last_word = -1
+            end = start + MAX_SECTION_LENGTH
 
-        if end > length:
-            end = length
-        else:
-            # Try to find the end of the sentence
-            while end < length and (end - start - MAX_SECTION_LENGTH) < SENTENCE_SEARCH_LIMIT and all_text[end] not in SENTENCE_ENDINGS:
-                if all_text[end] in WORDS_BREAKS:
-                    last_word = end
+            if end > length:
+                end = length
+            else:
+                # 文の終わりを探してみる
+                while end < length and (end - start - MAX_SECTION_LENGTH) < SENTENCE_SEARCH_LIMIT and all_text[end] not in SENTENCE_ENDINGS:
+                    if all_text[end] in WORDS_BREAKS:
+                        last_word = end
+                    end += 1
+                if end < length and all_text[end] not in SENTENCE_ENDINGS and last_word > 0:
+                    end = last_word # 少なくとも単語全体を保持することに戻ります
+            if end < length:
                 end += 1
-            if end < length and all_text[end] not in SENTENCE_ENDINGS and last_word > 0:
-                end = last_word # Fall back to at least keeping a whole word
-        if end < length:
-            end += 1
 
-        # Try to find the start of the sentence or at least a whole word boundary
-        last_word = -1
-        while start > 0 and start > end - MAX_SECTION_LENGTH - 2 * SENTENCE_SEARCH_LIMIT and all_text[start] not in SENTENCE_ENDINGS:
-            if all_text[start] in WORDS_BREAKS:
-                last_word = start
-            start -= 1
-        if all_text[start] not in SENTENCE_ENDINGS and last_word > 0:
-            start = last_word
-        if start > 0:
-            start += 1
+            # 文の始まり、または少なくとも単語の境界全体を見つけてください。
+            last_word = -1
+            while start > 0 and start > end - MAX_SECTION_LENGTH - 2 * SENTENCE_SEARCH_LIMIT and all_text[start] not in SENTENCE_ENDINGS:
+                if all_text[start] in WORDS_BREAKS:
+                    last_word = start
+                start -= 1
+            if all_text[start] not in SENTENCE_ENDINGS and last_word > 0:
+                start = last_word
+            if start > 0:
+                start += 1
 
-        section_text = all_text[start:end]
-        yield (section_text, find_page(start))
+            section_text = all_text[start:end]
+            yield (section_text, find_page(start))
 
-        last_table_start = section_text.rfind("<table")
-        if (last_table_start > 2 * SENTENCE_SEARCH_LIMIT and last_table_start > section_text.rfind("</table")):
-            # If the section ends with an unclosed table, we need to start the next section with the table.
-            # If table starts inside SENTENCE_SEARCH_LIMIT, we ignore it, as that will cause an infinite loop for tables longer than MAX_SECTION_LENGTH
-            # If last table starts inside SECTION_OVERLAP, keep overlapping
-            print(f"セクションは閉じていないテーブルで終了し{find_page(start)}オフセット{start}テーブル開始{last_table_start}ページのテーブルで次のセクションを開始する")
-            start = min(end - SECTION_OVERLAP, start + last_table_start)
-        else:
-            start = end - SECTION_OVERLAP
-        
-    if start + SECTION_OVERLAP < end:
+            last_table_start = section_text.rfind("<table")
+            if (last_table_start > 2 * SENTENCE_SEARCH_LIMIT and last_table_start > section_text.rfind("</table")):
+                # セクションが閉じられていないテーブルで終了する場合は、そのテーブルから次のセクションを開始する必要があります。
+                # テーブルが SENTENCE_SEARCH_LIMIT 内で始まる場合は、MAX_SECTION_LENGTH を超えるテーブルに対して無限ループが発生するため、無視します。
+                # 最後のテーブルが SECTION_OVERLAP 内で始まる場合は、オーバーラップし続けます
+                print(f"セクションは閉じていないテーブルで終了し{find_page(start)}オフセット{start}テーブル開始{last_table_start}ページのテーブルで次のセクションを開始する")
+                start = min(end - SECTION_OVERLAP, start + last_table_start)
+            else:
+                start = end - SECTION_OVERLAP
+            
+        if start + SECTION_OVERLAP < end:
+            yield (all_text[start:end], find_page(start))
+    else:
+    # if start + SECTION_OVERLAP >= length:
         yield (all_text[start:end], find_page(start))
 
 
@@ -270,15 +294,6 @@ def split_text(page_map):
 # セクションを検索インデックスにインデックスします。
 def index_sections(filename, sections):
     print(f"ファイル名「'{filename}'」のセクションを検索インデックス「'{AZURE_SEARCH_INDEX}'」にインデックスする")
-    search_client = SearchClient(
-        endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
-        index_name=AZURE_SEARCH_INDEX,
-        credential=AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
-        # azd_credential = AzureDeveloperCliCredential(tenant_id=AZURE_TENANT_ID, process_timeout=60)ダメ
-        # search_creds = AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)めっちゃダメfibbcon
-        # default_creds = ManagedIdentityCredential()よくわからないダメ
-        # azure_credential = DefaultAzureCredential()ダメ
-    )
     i = 0
     batch = []
     for s in sections:
@@ -289,78 +304,107 @@ def index_sections(filename, sections):
             succeeded = sum([1 for r in results if r.succeeded])
             print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功")
             batch = []
-
+    # PDF1枚のデータがたまにbacthに何も入らないことがある→修正
     if len(batch) > 0:
         results = search_client.upload_documents(documents=batch)
         succeeded = sum([1 for r in results if r.succeeded])
         print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功")  
 
-for filename in glob.glob(local_file_path):
-    page_map = get_document_text(filename)
-    sections = create_sections(os.path.basename(filename), page_map)
-    index_sections(os.path.basename(filename), sections)
+# 指定されたファイルをAzure Blob Storageにアップロードします。PDFの場合、各ページを個別のBlobとしてアップロードします。
+def upload_blobs(upload_file):
+    blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+    if not blob_container.exists():
+        blob_container.create_container()
+    filename = upload_file.filename
+    # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
+    if os.path.splitext(filename)[1].lower() == ".pdf":
+        reader = PdfReader(upload_file)
+        pages = reader.pages
+        for i in range(len(pages)):
+            blob_name = blob_name_from_file_page(filename, i)
+            print(f"\t {i} ページの BLOB をアップロードしています -> {blob_name}")
+            f = io.BytesIO()
+            writer = PdfWriter()
+            writer.add_page(pages[i])
+            writer.write(f)
+            f.seek(0)
+            blob_container.upload_blob(blob_name, f, overwrite=True)
+    else:
+        blob_name = blob_name_from_file_page(filename)
+        blob_container.upload_blob(blob_name, upload_file, overwrite=True)
+        # upload_file.close()
+    print(f"\t Azure Blob Starageへ {filename} の書き込みが終わりました。")
+
+#upload
+@app.route("/upload", methods=["POST"])
+def upload():
+    # ensure_openai_token()
+    print(request.files)
+    answer = []
+    try:
+        if 'file' not in request.files:
+            return "no"
+        # インデックスの存在を確認。なければ作成
+        create_search_index()
+        # ファイルのバイナリーデータ
+        upload_files = request.files.getlist("file")
+        for upload_file in upload_files:
+            # ファイルをBlobストレージに保存
+            upload_blobs(upload_file)
+            # ファイル名の抽出
+            filename = upload_file.filename
+            # ファイルを保存するディレクトリパスを指定
+            save_path = f"data/" + filename
+            # if not os.path.exists(save_path):
+            #     os.makedirs(save_path)
+            # ファイルを指定したパスに保存
+            # upload_file.save(save_path + "\\" + filename)
+            # PDFの場合
+             # PDFを開く
+            pdf_reader = pypdf.PdfReader(upload_file)
+            pdf_writer = pypdf.PdfWriter()
+        
+            # ページをコピー
+            for page in pdf_reader.pages:
+                pdf_writer.add_page(page)
+            
+            # 新しいPDFファイルに書き込む
+            output_file_path = save_path
+            with open(output_file_path, 'wb') as output_file:
+                pdf_writer.write(output_file)
+
+            print(f"\t ('{filename}')をtempフォルダに保存しました。")
 
 
+            # 保存されたディレクトリパスを指定
+            saved_path = f"data"
+            # 保存されたファイルのURL
+            file_url = saved_path + "/" + filename
+            
+            page_map = get_document_text(file_url)
+            sections = create_sections(os.path.basename(filename), page_map)
+            index_sections(os.path.basename(filename), sections)
 
+            answer.append({"ansesr": True})
+        return jsonify(answer)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    # data = request.form  # フォームデータを取得する場合
+    # data = request.files  # ファイルを含むフォームデータを取得する場合
 
+    # 受け取ったデータを出力して確認
+    print(data)
 
-# # 接続文字列
+# OpenAI APIへのアクセスに必要なトークンを確認し、必要に応じて更新する
+def ensure_openai_token():
+    global openai_token
+    if openai_token.expires_on < int(time.time()) - 60:
+        openai_token = azure_credential.get_token("https://cognitiveservices.azure.com/.default")
+        openai.api_key = openai_token.token
+        # openai.api_key = os.environ.get("AZURE_OPENAI_KEY")
 
-# # コンテナー名
-
-# # ファイル名
-# blob_name = 'test.txt'
-
-# client = BlobClient.from_connection_string(connection_str, AZURE_STORAGE_CONTAINER_NAME, blob_name)
-
-# # アップロード
-# upload_data = 'hello world.'
-# client.upload_blob(upload_data, overwrite=True)
-
-# # ダウンロード
-# download_data = client.download_blob().readall()
-
-
-
-
-
-
-
-# # Azure Storage上にて、接続文字列を確認する。
-# connect_str = "test"
-
-# # Create a file in local data directory to upload and download
-# AZURE_STORAGE_CONTAINER_NAME = "<コンテナ名称>"
-
-# # Azure Storage内は厳密には、フォルダという構成ではない。
-# # 一応 "\"区切りをすることで、疑似的にフォルダ構造を実現することは可能
-# upload_path = "<アップロード先のフォルダ名称>"
-
-# # アップロードするファイル名(実行位置によって、相対ファイルパスを記載すること)
-# local_file_name = "HelloWorld.txt"
-
-# # アップロード先
-# upload_file_path = os.path.join(upload_path, local_file_name)
-
-# # 自身のAzure Storageに接続するためのインスタンスを作成する。
-# blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-
-# # Azure Storageの指定コンテナに接続するブロブ（ファイル）のクライアントインスタンスを作成する。
-# blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=local_file_name)
-
-# print("\nUploading to Azure Storage as blob:\n\t" + local_file_name)
-
-# # Azure Storageへのアップロード
-# with open(upload_file_path, "rb") as data:
-#     blob_client.upload_blob(data)
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    app.run(debug=True)
 
 
 
@@ -454,14 +498,6 @@ for filename in glob.glob(local_file_path):
 #         blob_client = await container_client.upload_blob(name="sample-blob.txt", data=data, overwrite=True)
 
 
-
-
-
-
-
-
-
-
 # # Blob Storage へのアクセスを承認して接続する
 # def get_blob_service_client(self, AZURE_STORAGE_ACCOUNT):
 #     account_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net"
@@ -486,31 +522,5 @@ for filename in glob.glob(local_file_path):
 
 #     return blob_service_client
 
-# @app.route('/')
-# def hello():
-#     return "Hello from Flask!"
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == '__main__':
-    app.run(debug=True)

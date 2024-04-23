@@ -1,6 +1,8 @@
 import styles from './DocRegistration.module.css';
 import DocRegistrationModal from '@/components/DocRegistrationModal';
 
+import { uploadApi } from "../../api";
+
 const DocRegistration = () => {
     return (
         <div className={styles.container}>

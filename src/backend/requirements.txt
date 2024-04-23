@@ -13,3 +13,8 @@ azure-search-documents==11.4.0b6
 azure-ai-formrecognizer==3.2.1
 pypdf==3.17.0
 python-dotenv==1.0.1
+opentelemetry-instrumentation-flask==0.40b0
+azure-monitor-opentelemetry==1.0.0b15
+openai==0.27.8
+pdf2image==1.17.0
+

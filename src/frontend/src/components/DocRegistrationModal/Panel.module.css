@@ -28,3 +28,86 @@
     text-align: center;
     margin: 30px 70px 0
 }
+
+
+
+
+
+
+
+
+
+
+.wrapper {
+    position: relative;
+    width: 100%;
+    background-color: #F1F3F6;
+    border-radius: 30px;
+    overflow: hidden;
+    padding: 30px;
+}
+
+.file_upload {
+    border: 1px dashed #000;
+    border-radius: 15px;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.file_name {
+    text-align: center;
+}
+
+.note {
+    line-height: 10px;
+}
+
+.caution {
+    line-height: 10px;
+}
+
+.file {
+    padding-left: 0;
+}
+
+.file_list {
+    list-style: none;
+}
+
+.file_item {
+    display: flex;
+    justify-content: space-between;
+    border: solid 1px #000;
+}
+
+.file_item_type {
+
+}
+
+.icon_file {
+
+}
+
+.file_item_body {
+
+}
+
+.file_item_name {
+
+}
+
+.file_item_trash {
+
+}
+
+.icon_trash {
+
+}
+.is_drag_accept {
+    background-color: #e9ffea;
+    border-color: #25cb32;
+}
+
+.is_drag_reject {
+    background-color: #ffe8e9;
+    border-color: #f7565e;
+}
