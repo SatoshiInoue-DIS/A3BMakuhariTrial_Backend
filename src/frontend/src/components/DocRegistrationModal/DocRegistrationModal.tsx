@@ -4,8 +4,10 @@ import styles from './DocRegistrationModal.module.css'
 import Modal from "./Modal";
 import Panel from "./Panel";
 
-
-const DocRegistrationModal = () => {
+interface props {
+    bot:string;
+}
+const DocRegistrationModal:React.FC<props> = ({bot}) => {
     const [isOpenModal, setIsOpenModal] = useState(false);
 
     const toggleModalkari = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -21,7 +23,7 @@ const DocRegistrationModal = () => {
             </button>
             {isOpenModal && (
                 <Modal close={toggleModalkari}>
-                    <Panel />
+                    <Panel bot={bot}/>
                 </Modal>
             )}
         </div>

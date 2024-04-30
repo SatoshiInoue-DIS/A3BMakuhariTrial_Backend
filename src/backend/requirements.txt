@@ -17,4 +17,5 @@ opentelemetry-instrumentation-flask==0.40b0
 azure-monitor-opentelemetry==1.0.0b15
 openai==0.27.8
 pdf2image==1.17.0
+pytz
 

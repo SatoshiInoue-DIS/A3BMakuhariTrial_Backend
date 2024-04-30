@@ -12,6 +12,7 @@ import { UploadRequest, uploadApi } from "../../api";
 
 type Props = {
     close?: (e: any) => void;
+    bot: string;
 };
 
 const Panel: NextPage<Props> = (props) => {
@@ -21,7 +22,6 @@ const Panel: NextPage<Props> = (props) => {
             props.close(e);
         }
     };
-
 
     const [currentShowFiles, setCurrentShowFiles] = useState<{ file: File; isUploaded: boolean }[]>([]);
 
@@ -43,25 +43,9 @@ const Panel: NextPage<Props> = (props) => {
             alert(`アップロード中にエラーが発生しました: ${error}`);
         }
     };
-
-
-
-    
-    
-    
-    
-    
     
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
-            
-            
-            
-            
-
-
-
-
 
             // ドロップしたファイルの中で、現在表示されているファイルと重複しているもの( filename と size が同じファイル)を除外する。
             const filteringFiles = acceptedFiles.filter(
@@ -92,14 +76,6 @@ const Panel: NextPage<Props> = (props) => {
                     //     formData.append("file", file)
                     //     console.log(formData.entries())
                     // })
-
-
-                    
-
-
-
-
-
 
                 } catch (error) {
                     // ↓ここでエラーに関するユーザーへの通知や処理を行う
@@ -159,19 +135,12 @@ const Panel: NextPage<Props> = (props) => {
         setCurrentShowFiles(filteringFiles);
     };
 
-
-
-
-
-
-
-
-
     const makeApiRequest = async () => {
         try {
             const formData = new FormData();
             currentShowFiles.forEach((fileInfo) => {
                 formData.append("file", fileInfo.file);
+                formData.append("bot", props.bot);
             });
             const response = await uploadApi(formData);
             // ファイル情報をAPIリクエストに含める
@@ -233,6 +202,7 @@ const Panel: NextPage<Props> = (props) => {
             <div>
                 <header className={Style.modalPanelHeader}>
                     <h3>ファイルのアップロード</h3>
+                    <p>{props.bot}</p>
                     <button type="button" onClick={props.close}>×</button>
                 </header>
                 <div

@@ -15,21 +15,43 @@
 }
 
 .commandsContainer {
-    height: 30vh;
+    height: 20vh;
     margin: 0 20px;
 }
  .titleAndSelectArea {
     display: flex;
     justify-content: space-between;
 }
-
+.botChoiceArea {
+    display: flex;
+    width: 25%;
+    justify-content: space-between;
+    align-items: center;
+}
+.botSelectBox {
+    height: 50%;
+    width: 70%;
+}
 .registrationDeletionArea {
     text-align: right;
 }
 
-.DocRegistrationButtonArea {
-    display: block;
+.docRegistrationButtonArea {
     width: 150px;
     margin: 0 auto;
+    text-align: center;
+}
 
+.border {
+    border-width: 1px 0 0 0;
+    border-style: solid;
+    margin: 0 10px;
+}
+
+.displayRegisteredDataArea {
+    height: 56vh;
+    margin: 10px;
+    background-color: #fff;
+    border-radius: 15px;
+    overflow-y: scroll;
 }
