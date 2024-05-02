@@ -8,7 +8,6 @@ import pypdf
 import datetime
 import pytz
 
-import openai
 
 from io import BytesIO
 from dotenv import load_dotenv
@@ -17,6 +16,9 @@ from flask_cors import CORS
 from pypdf import PdfReader, PdfWriter
 
 import asyncio
+from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+import json
 
 from azure.identity import DefaultAzureCredential
 from azure.identity import ManagedIdentityCredential
@@ -30,7 +32,6 @@ from azure.search.documents.indexes.models import *
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.ai.formrecognizer import FormRecognizerClient
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
-
 
 
 
@@ -55,6 +56,14 @@ AZURE_SEARCH_SERVICE_KEY = os.environ.get("AZURE_SEARCH_SERVICE_KEY")
 AZURE_FORMRECOGNIZER_SERVICE = os.environ.get("AZURE_FORMRECOGNIZER_SERVICE")
 AZURE_FORM_RECOGNIZER_KEY=os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID")
+
+AZURE_OPENAI_TEXT_EMBEDDING_ADA_002_DEPLOYMENT = os.environ["AZURE_OPENAI_TEXT_EMBEDDING_ADA_002_DEPLOYMENT"]
+AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
+AZURE_OPENAI_SERVICE = os.environ["AZURE_OPENAI_SERVICE"]
+AZURE_OPENAI_ENDPOINT = f"https://{AZURE_OPENAI_SERVICE}.openai.azure.com"
+AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
+
+
 
 azure_credential = DefaultAzureCredential()
 search_client = SearchClient(
@@ -82,6 +91,25 @@ index_client = SearchIndexClient(
     credential=azure_credential
 )
 
+token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
+
+openai_client = AzureOpenAI(
+    azure_deployment=AZURE_OPENAI_TEXT_EMBEDDING_ADA_002_DEPLOYMENT,
+    api_version=AZURE_OPENAI_API_VERSION,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_KEY,
+    azure_ad_token_provider=token_provider if not AZURE_OPENAI_KEY else None
+)
+
+# ベクトル変換
+def generate_embeddings(text):
+    response = openai_client.embeddings.create(
+        input=text,
+        model=AZURE_OPENAI_TEXT_EMBEDDING_ADA_002_DEPLOYMENT  # text-embedding-ada-002 のデプロイ名
+    )
+    embeddings = response.data[0].embedding
+    return embeddings
+
 # コンテナーの作成
 # container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
 # container_client.create_container()
@@ -99,20 +127,43 @@ def create_search_index():
         index = SearchIndex(
             name=AZURE_SEARCH_INDEX,
             fields=[
-                SimpleField(name="id", type="Edm.String", key=True),
-                SearchableField(name="content", type="Edm.String", analyzer_name="ja.microsoft"),
+                SimpleField(name="id", type="Edm.String", key=True, sortable=True, filterable=True, facetable=True),
+                SearchableField(name="content", type="SearchFieldDataType.String", analyzer_name="ja.microsoft"),
                 SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
                 SimpleField(name="sourcepage", type="Edm.String", filterable=True, facetable=True),
-                SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True)
+                SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True),
+                SearchField(name="titleVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True, vector_search_dimensions=1536, vector_search_profile_name="default"),
+                SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True, vector_search_dimensions=1536, vector_search_profile_name="default")
             ],
-            semantic_settings=SemanticSettings(
+            semantic_settings=SemanticSearch(
                 configurations=[SemanticConfiguration(
                     name='default',
-                    prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
+                    prioritized_fields=SemanticPrioritizedFields(
+                        title_field=SemanticField(field_name="sourcefile"), 
+                        keywords_fields=[SemanticField(field_name="category")],
+                        content_fields=[SemanticField(field_name='content')]
+                    )
+                )]
+            ),
+            vector_search = VectorSearch(
+                algorithms=[
+                    HnswAlgorithmConfiguration(
+                        name="default",
+                        kind="hnsw"
+                    )
+                ],
+                profiles=[
+                    VectorSearchProfile(
+                        name="default",
+                        algorithm_configuration_name="default",
+                    )
+                ]
+            )
         )
-        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）の作成しました。")
         index_client.create_index(index)
+        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）の作成しました。")
     else:
         print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）はすでに存在します。")
 
@@ -157,17 +208,25 @@ def get_document_text(upload_url):
         # ファイルの位置を先頭に移動する
         f.seek(0)
         form = f.read()
+        # モデル分析機能：prebuilt-layout
         poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = form)
+    # 分析した結果を取り出す
     form_recognizer_results = poller.result()
     # print ("ドキュメントにはコンテンツが含まれています: ", form_recognizer_results.content)
 
+    # 取り出した結果をページごとに分ける
     for page_num, page in enumerate(form_recognizer_results.pages):
+        # page_num + 1と同じpage_numberのものをtables_on_pageに代入する
         tables_on_page = [table for table in form_recognizer_results.tables if table.bounding_regions[0].page_number == page_num + 1]
 
         # ページ内のテーブル スパンのすべての位置をマークします。
+        # スパンで表されるコンテンツの 0 から始まるインデックス
         page_offset = page.spans[0].offset
+        # スパンで表されるコンテンツ内の文字数
         page_length = page.spans[0].length
+        # page_lengthの数だけ-1のリストを作る
         table_chars = [-1]*page_length
+        # page_num + 1のテーブルを分ける
         for table_id, table in enumerate(tables_on_page):
             for span in table.spans:
                 # すべてのテーブル スパンを table_chars 配列の「table_id」に置き換えます
@@ -217,7 +276,9 @@ def create_sections(filename, page_map):
             # "content": page_map[i][2],
             "category": "document",
             "sourcepage": blob_name_from_file_page(filename, pagenum),
-            "sourcefile": filename
+            "sourcefile": filename,
+            "titleVector": generate_embeddings(filename),
+            "contentVector": generate_embeddings(section)
         }
 
 # ページマップからテキストをセクションに分割します。
@@ -330,7 +391,7 @@ def upload_blobs(upload_file):
         # upload_file.close()
     print(f"\t Azure Blob Starageへ {filename} の書き込みが終わりました。")
 
-
+# Azure Blob Storage内のデータを取得
 def get_seved_file_info(botname):
     container_client  = blob_service_client.get_container_client(container=botname)
     blob_list = container_client.list_blobs()
