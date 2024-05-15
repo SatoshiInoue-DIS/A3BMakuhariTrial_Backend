@@ -3,6 +3,25 @@ import {
     SevedFileRequest, SevedFileResponse
 } from "./models";
 
+//Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
+export async function deleteApi(options: {filename: string}, bot:string): Promise<UploadResponse> {
+    const response = await fetch("http://localhost:5000/delete", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ options, bot: bot })
+    });
+
+    const parsedResponse: UploadResponse = await response.json();
+    if (response.status > 299 || !response.ok) {
+        throw Error(parsedResponse.error || "Unknown error");
+    }
+
+    return parsedResponse;
+}
+
+// ドキュメントをAzure Blob Storageに登録及びAzure AI Searchの検索インデックスに登録
 export async function uploadApi(options: FormData): Promise<UploadResponse> {
     console.log(options)
     const response = await fetch("http://localhost:5000/upload", {
@@ -21,6 +40,7 @@ export async function uploadApi(options: FormData): Promise<UploadResponse> {
     return parsedResponse;
 }
 
+// Azure Blob Storageに登録してあるドキュメント情報を取得する
 export async function savedfileApi(options: SevedFileRequest): Promise<[]> {
     const response = await fetch("http://localhost:5000/savedfile", {
         method: "POST",

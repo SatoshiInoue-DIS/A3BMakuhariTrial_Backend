@@ -1,24 +1,14 @@
 import os
-import io 
-import glob
+import io
 import html
 import re
-import time
-import pypdf
-import datetime
-import pytz
+import base64
 
-
-from io import BytesIO
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
-from flask_cors import CORS
 from pypdf import PdfReader, PdfWriter
 
-import asyncio
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-import json
 
 from azure.identity import DefaultAzureCredential
 from azure.identity import ManagedIdentityCredential
@@ -26,12 +16,9 @@ from azure.identity import AzureDeveloperCliCredential
 from azure.core.credentials import AzureKeyCredential
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexerClient
-from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes import SearchIndexClient, SearchIndexerClient
 from azure.search.documents.indexes.models import *
 from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.ai.formrecognizer import FormRecognizerClient
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
 
 
 
@@ -43,15 +30,13 @@ SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
 AZURE_STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
-AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY")
-PROTOCOL = os.environ.get("PROTOCOL")
 
-# Azure Storageアカウントの接続情報の設定
-AZURE_STORAGE_CONNECTION_STRING = f"DefaultEndpointsProtocol={PROTOCOL};AccountName={AZURE_STORAGE_ACCOUNT};AccountKey={AZURE_STORAGE_ACCOUNT_KEY}"
+
 AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME")
 
 AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_INDEX = os.environ.get("AZURE_SEARCH_INDEX")
+AZURE_SEARCH_INDEXER = os.environ.get("AZURE_SEARCH_INDEXER")
 AZURE_SEARCH_SERVICE_KEY = os.environ.get("AZURE_SEARCH_SERVICE_KEY")
 AZURE_FORMRECOGNIZER_SERVICE = os.environ.get("AZURE_FORMRECOGNIZER_SERVICE")
 AZURE_FORM_RECOGNIZER_KEY=os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
@@ -64,16 +49,14 @@ AZURE_OPENAI_ENDPOINT = f"https://{AZURE_OPENAI_SERVICE}.openai.azure.com"
 AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
 
 
-
 azure_credential = DefaultAzureCredential()
 search_client = SearchClient(
     endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
     index_name=AZURE_SEARCH_INDEX,
     credential=AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
 )
+
 # BlobServiceClientの作成
-blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
-# こっちでもいい
 blob_service = BlobServiceClient(
     account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net",
     credential=azure_credential
@@ -87,6 +70,11 @@ formrecognizer_creds = search_creds
 default_creds = ManagedIdentityCredential()
 
 index_client = SearchIndexClient(
+    endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
+    credential=azure_credential
+)
+
+indexers_client = SearchIndexerClient(
     endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
     credential=azure_credential
 )
@@ -113,7 +101,6 @@ def generate_embeddings(text):
 # コンテナーの作成
 # container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
 # container_client.create_container()
-
 # Blobのアップロード
 # blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name)
 # with open(local_file_path, "rb") as data:
@@ -131,7 +118,7 @@ def create_search_index():
                 SearchableField(name="content", type="SearchFieldDataType.String", analyzer_name="ja.microsoft"),
                 SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
                 SimpleField(name="sourcepage", type="Edm.String", filterable=True, facetable=True),
-                SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True),
+                SearchableField(name="sourcefile", type="Edm.String", filterable=True, facetable=True),
                 SearchField(name="titleVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
                 searchable=True, vector_search_dimensions=1536, vector_search_profile_name="default"),
                 SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
@@ -169,6 +156,53 @@ def create_search_index():
 
     # print("ファイルを処理しています...")
 
+# Container内のすべてのBLOBを取得するし、名前だけを返す
+def getAllFiles(bot):
+    container_client = blob_service.get_container_client(bot)
+    blob_list = container_client.list_blobs().by_page()
+    # Blobの名前のみを含むリストの作成
+    blob_names = []
+    # Blobの名前をリストに追加
+    for page in blob_list:
+        for blob in page:
+            blob_names.append(blob.name)
+    return blob_names
+
+# 指定したBlobデータをContainer内から論理的な削除をする
+def deleteBlob(files, container):
+    for blob in files:
+        blob_client = blob_service.get_blob_client(container=container, blob=blob)
+        blob_client.delete_blob()
+    return True
+
+# インデクサーを実行する
+def run_indexer():
+    result = indexers_client.run_indexer(AZURE_SEARCH_INDEXER)
+    return result
+
+# 検索インデックスから削除したBlobデータに紐づいたインデックスを削除する
+# sourcefileフィールドに検索をかけ、出てきたインデックスのidを取得しそのidを元に削除(指定するきKeyは一意である必要がある為)
+def removeSearchIndex(files):
+    success = True
+    delete_ids = []
+    for file in files:
+        try:
+            # 検索クエリを定義
+            search_query = file
+            # 検索実行
+            search_results = search_client.search(search_text=search_query, search_fields=["sourcefile"], search_mode="all", select=["id"])
+            # 検索結果からidを取得
+            for result in search_results:
+                document_id = result["id"]
+                delete_ids.append(document_id)
+                search_client.delete_documents(documents=[{"id":document_id}])
+        except Exception as e:
+            # エラー処理
+            print(f"エラー：{e}")
+            success = False
+    return success
+
+
 
 # ファイル名とページ番号からBlobの名前を生成します。
 def blob_name_from_file_page(filename, page = 0):
@@ -179,10 +213,11 @@ def blob_name_from_file_page(filename, page = 0):
 
 
 
-#  PDFからテキストを抽出します。Azure Form Recognizerサービスを使用します。
-def get_document_text(upload_url):
+#  直接blobのURLを見に行きPDFからテキストを抽出します。Azure Form Recognizerサービスを使用します。
+def get_document_text(page, index):
     offset = 0
     page_map = []
+    blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{index}/{page}"
     # filename = upload_file.filename
     # print(f"Azure Form Recognizer を使用して '{filename}' からテキストを抽出します")
     # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
@@ -204,12 +239,13 @@ def get_document_text(upload_url):
 
     # file_bytes_io = BytesIO(upload_file)
     # file_bytes = file_bytes_io.getvalue()
-    with open(upload_url, "rb") as f:
-        # ファイルの位置を先頭に移動する
-        f.seek(0)
-        form = f.read()
+    poller = form_recognizer_client.begin_analyze_document_from_url(model_id="prebuilt-layout", document_url = blob_url)
+    # with open(upload_url, "rb") as f:
+    #     # ファイルの位置を先頭に移動する
+    #     f.seek(0)
+    #     form = f.read()
+    #     poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = form)
         # モデル分析機能：prebuilt-layout
-        poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = form)
     # 分析した結果を取り出す
     form_recognizer_results = poller.result()
     # print ("ドキュメントにはコンテンツが含まれています: ", form_recognizer_results.content)
@@ -280,6 +316,11 @@ def create_sections(filename, page_map):
             "titleVector": generate_embeddings(filename),
             "contentVector": generate_embeddings(section)
         }
+
+# Base64エンコードを行う
+def encode(filename):
+    encoded_blob_name = base64.urlsafe_b64encode(filename.encode()).decode()
+    return encoded_blob_name
 
 # ページマップからテキストをセクションに分割します。
 def split_text(page_map):
@@ -369,9 +410,11 @@ def index_sections(filename, sections):
 # 指定されたファイルをAzure Blob Storageにアップロードします。PDFの場合、各ページを個別のBlobとしてアップロードします。
 def upload_blobs(upload_file):
     blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+    # コンテナーがなければ作成
     if not blob_container.exists():
         blob_container.create_container()
     filename = upload_file.filename
+    organized_allpages = []
     # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
     if os.path.splitext(filename)[1].lower() == ".pdf":
         reader = PdfReader(upload_file)
@@ -385,41 +428,16 @@ def upload_blobs(upload_file):
             writer.write(f)
             f.seek(0)
             blob_container.upload_blob(blob_name, f, overwrite=True)
+            organized_allpages.append(blob_name)
     else:
         blob_name = blob_name_from_file_page(filename)
         blob_container.upload_blob(blob_name, upload_file, overwrite=True)
+        organized_allpages.append(blob_name)
         # upload_file.close()
     print(f"\t Azure Blob Starageへ {filename} の書き込みが終わりました。")
+    return organized_allpages
 
-# Azure Blob Storage内のデータを取得
-def get_seved_file_info(botname):
-    container_client  = blob_service_client.get_container_client(container=botname)
-    blob_list = container_client.list_blobs()
-    # ファイル名、登録日時、更新日時、サイズ、削除したかどうか、削除した日時
-    file_info_taple = ()
-    files_info_list = []
-    for blob in blob_list:
-        # UTC時間をJSTに変換
-        jst_timezone = pytz.timezone('Asia/Tokyo')
-        utc_creation_time = blob.creation_time
-        utc_last_modified = blob.last_modified
 
-        jst_creation_time = utc_creation_time.astimezone(jst_timezone)
-        jst_last_modified = utc_last_modified.astimezone(jst_timezone)
-        if blob.deleted_time == None:
-            jst_deleted_time = ''
-        else:
-            utc_deleted_time = blob.deleted_time
-            jst_deleted_time = utc_deleted_time.astimezone(jst_timezone)
-
-        if blob.deleted == None:
-            blob_deleted = False
-        else:
-            blob_deleted = blob.deleted
-
-        file_info_taple = (blob.name, jst_creation_time, jst_last_modified, blob.size, blob_deleted, jst_deleted_time)
-        files_info_list.append(file_info_taple)
-    return files_info_list
 
 
 # # ローカル ファイル パスからブロック BLOB をアップロードする

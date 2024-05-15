@@ -14,11 +14,16 @@ export type SevedFileRequest = {
 }
 
 export type SevedFileResponse = {
+    // check:  any;
+    // filename: string;
+    // creation_time: string;
+    // last_modified: string;
+    // size: number;
+    // deleted: boolean;
+    // deleted_time: string;
+    // error?: string;
     filename: string;
-    creation_time: string;
-    last_modified: string;
     size: number;
-    deleted: boolean;
-    deleted_time: string;
-    error?: string;
+    last_modified: string;
+    delete: boolean | undefined;
 }

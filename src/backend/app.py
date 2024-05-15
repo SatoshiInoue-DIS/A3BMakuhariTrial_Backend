@@ -4,27 +4,46 @@ import pypdf
 
 import openai
 
-from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from azure.identity import DefaultAzureCredential
-from azure.identity import ManagedIdentityCredential
-from azure.identity import AzureDeveloperCliCredential
-from azure.core.credentials import AzureKeyCredential
-from azure.storage.blob import BlobServiceClient
-from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import *
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from core.uploadfile import *
+from core.savedfile import *
 
 # configure_azure_monitor()
 app = Flask(__name__)
+# 文字コードの設定をUTF-8(asciiじゃなくする)にする(Flaskは元々がascii)
+app.config["JSON_AS_ASCII"] = False
 CORS(app)  # CORS設定を追加
 FlaskInstrumentor().instrument_app(app)
 
-#ボットに登録しているファイルデータの取得
+# Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
+@app.route("/delete", methods=["POST"])
+def delete():
+    print(request.json["bot"] + "から" + request.json["options"]["filename"] + "を削除する")
+    deleteFileName = request.json["options"]["filename"]
+    baseName = os.path.splitext(deleteFileName)[0]
+    extension = os.path.splitext(deleteFileName)[1]
+    botname = request.json["bot"]
+    try:
+        if botname == "幕張トライアル":
+            containername = "test"
+            blobList = getAllFiles(containername)
+            selectedFiles = [file for file in blobList if baseName in file and file.lower().endswith(extension)]
+            deleteResultOfBlob = deleteBlob(selectedFiles, containername)
+            deleteResultOfIndex = removeSearchIndex(selectedFiles)
+            if deleteResultOfBlob and deleteResultOfIndex:
+                answer = { "answer": True }
+            else:
+                answer = { "answer": False }
+            # bbb = run_indexer()
+        return jsonify(answer)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+#Azure Blob Storageに登録してあるドキュメント情報を取得する
 @app.route("/savedfile", methods=["POST"])
 def savedfile():
     print(request.json["options"]["bot"])
@@ -43,54 +62,66 @@ def upload():
     # ensure_openai_token()
     print(request.files)
     print(request.form["bot"])
+    answer = []
     #選択したボット名を持ってきてた
     botname = request.form["bot"]
-    answer = []
+    bot = ""
+    if botname == "幕張トライアル" :
+        index = "test"
+    else :
+        index = ""
+        answer = { "answer": False }
+        return jsonify(answer)
     try:
         if 'file' not in request.files:
-            return "no"
+            answer = { "answer": False }
+            return jsonify(answer)
         # インデックスの存在を確認。なければ作成
         create_search_index()
         # ファイルのバイナリーデータ
         upload_files = request.files.getlist("file")
         for upload_file in upload_files:
-            # ファイルをBlobストレージに保存
-            upload_blobs(upload_file)
+            # ファイルをBlobストレージに保存し、ファイル名を取得
+            organized_allpages = upload_blobs(upload_file)
             # ファイル名の抽出
-            filename = upload_file.filename
-            # ファイルを保存するディレクトリパスを指定
-            save_path = f"data/" + filename
-            # if not os.path.exists(save_path):
-            #     os.makedirs(save_path)
-            # ファイルを指定したパスに保存
-            # upload_file.save(save_path + "\\" + filename)
-            # PDFの場合
-             # PDFを開く
-            pdf_reader = pypdf.PdfReader(upload_file)
-            pdf_writer = pypdf.PdfWriter()
+#             filename = upload_file.filename
+#             # ファイルを保存するディレクトリパスを指定
+#             save_path = f"../../data/" + filename
+# # デバック時は以下のディレクトリに設定する
+#             # save_path = f"data/" + filename
+#             # if not os.path.exists(save_path):
+#             #     os.makedirs(save_path)
+#             # ファイルを指定したパスに保存
+#             # upload_file.save(save_path + "\\" + filename)
+#             # PDFの場合
+#              # PDFを開く
+#             pdf_reader = pypdf.PdfReader(upload_file)
+#             pdf_writer = pypdf.PdfWriter()
         
-            # ページをコピー
-            for page in pdf_reader.pages:
-                pdf_writer.add_page(page)
+#             # ページをコピー
+#             for page in pdf_reader.pages:
+#                 pdf_writer.add_page(page)
             
-            # 新しいPDFファイルに書き込む
-            output_file_path = save_path
-            with open(output_file_path, 'wb') as output_file:
-                pdf_writer.write(output_file)
+#             # 新しいPDFファイルに書き込む
+#             output_file_path = save_path
+#             with open(output_file_path, 'wb') as output_file:
+#                 pdf_writer.write(output_file)
 
-            print(f"\t ('{filename}')をtempフォルダに保存しました。")
+#             print(f"\t ('{filename}')をtempフォルダに保存しました。")
 
 
-            # 保存されたディレクトリパスを指定
-            saved_path = f"data"
-            # 保存されたファイルのURL
-            file_url = saved_path + "/" + filename
-            
-            page_map = get_document_text(file_url)
-            sections = create_sections(os.path.basename(filename), page_map)
-            index_sections(os.path.basename(filename), sections)
+#             # 保存されたディレクトリパスを指定
+#             saved_path = f"../../data"
+# # デバック時は以下のディレクトリに設定する
+#             # saved_path = f"data"
+#             # 保存されたファイルのURL
+#             file_url = saved_path + "/" + filename
+            for page in organized_allpages:
+                page_map = get_document_text(page, index)
+                sections = create_sections(os.path.basename(page), page_map)
+                index_sections(os.path.basename(page), sections)
 
-            answer.append({"ansesr": True})
+            answer = { "answer": True }
         return jsonify(answer)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

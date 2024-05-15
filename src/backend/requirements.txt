@@ -9,7 +9,7 @@ MarkupSafe==2.1.5
 Werkzeug==3.0.1
 azure-storage-blob[aio]==12.19.1
 azure-identity==1.15.0
-azure-search-documents==11.6.0b1
+azure-search-documents==11.6.0b3
 azure-ai-formrecognizer==3.2.1
 pypdf==3.17.0
 python-dotenv==1.0.1

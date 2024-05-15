@@ -24,6 +24,8 @@ const Panel: NextPage<Props> = (props) => {
     };
 
     const [currentShowFiles, setCurrentShowFiles] = useState<{ file: File; isUploaded: boolean }[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
 
     const onUploadFile = async (file: File) => {
         try {
@@ -135,7 +137,10 @@ const Panel: NextPage<Props> = (props) => {
         setCurrentShowFiles(filteringFiles);
     };
 
+    const [uploadComp, setUploadComp] = useState<boolean>(false);
+
     const makeApiRequest = async () => {
+        setIsLoading(true);
         try {
             const formData = new FormData();
             currentShowFiles.forEach((fileInfo) => {
@@ -143,147 +148,125 @@ const Panel: NextPage<Props> = (props) => {
                 formData.append("bot", props.bot);
             });
             const response = await uploadApi(formData);
-            // ファイル情報をAPIリクエストに含める
-            // const requests = formData.map(fileInfo => ({
-                // file_name: fileInfo.file.name,
-                // file_path: fileInfo.filePath
-                // file_data: fileInfo.file
-            // }));
-            // バックエンドに一括送信
-            // const results = await Promise.all(requests.map(request => uploadApi(request)));
-            // 結果を処理する
-            // console.log(response);
-            // const request: UploadRequest = {
-            //     file_name: currentShowFiles[0].file.name,
-            //     file_path: currentShowFiles[0].file.name
-            // };
-            // const result = await uploadApi(request);
-            // setUploadComp(result.answer);
+            
+            setUploadComp(response.answer);
+            setIsLoading(false);
         } catch (e) {
             // setError(e);
             alert(`アップロード中にエラーが発生しました: ${e}`);
+            setIsLoading(false);
         } finally {
-            // setIsLoading(false);
+            setIsLoading(false);
         }
     };
 
 
     return (
-    //     <section className={Style.modalPanel}>
-    //         <header className={Style.modalPanelHeader}>
-    //             <h3>ファイルのアップロード</h3>
-    //             <button type="button" onClick={props.close}>×</button>
-    //         </header>
-    //         <div className={Style.dropArea}>
-    //             <div className={Style.dropAreaTop}>
-    //                 <h3>
-    //                     ここにファイルをドラッグ＆ドロップ（複数選択可）<br/>
-    //                     または
-    //                 </h3>
-    //                 <div>
-    //                     <input type="file" />
-    //                 </div>
-    //             </div>
-    //             <div>
-    //                 <div className={Style.dropAreaNotes}>
-    //                     <p>*アップロード可能なファイル形式（*.pdf、*.doc、*.docx、*.xls、*.xlsx、*.ppt、*.pptx）</p>
-    //                     <p>*1ファイルサイズの上限は100MBまでです。</p>
-    //                     <p>*パスワードで保護されたドキュメントは登録できますが、回答には反映されません。</p>
-    //                     <p>*ファイルを登録してからBotの応答に反映されるまでに、10分前後かかります。</p>
-    //                 </div>
-    //             </div>
-    //         </div>
-    //         <footer className={Style.FileUploadBtnArea}>
-    //             <button type="submit" onClick={submit}>ファイルのアップロード</button>
-    //         </footer>
-    //     </section>
-    // );
         <div className={Style.wrapper}>
-            <div>
-                <header className={Style.modalPanelHeader}>
-                    <h3>ファイルのアップロード</h3>
-                    <p>{props.bot}</p>
-                    <button type="button" onClick={props.close}>×</button>
-                </header>
-                <div
-                    {...getRootProps()}
-                    className={`${Style.file_upload} ${setDropZoneStyle()}`}
-                >
-                    <input {...getInputProps()} />
-                    <p className={Style.file_name}>
-                        {isDragAccept
-                            ? "ファイルをアップロードします。"
-                            : isDragReject
-                                ? "エラー"
-                                : "ファイルを登録してください。"
-                        }
-                    </p>
-                    <p className={Style.file_name}>
-                        {isDragReject
-                            ? "このファイル形式のアップロードは許可されていません。"
-                            : "ファイルを選択するか、ドラッグアンドドロップ（複数選択可）してください。"
-                        }
-                    </p>
-                    <button disabled={isDragReject}>ファイルを選択</button>
-                </div>
-                <p className={Style.note}>*アップロード可能なファイル形式（*.pdf、*.doc、*.docx、*.xls、*.xlsx、*.ppt、*.pptx）</p>
-                <p className={Style.caution}>*1ファイルサイズの上限は100MBまでです。</p>
-                <p className={Style.note}>*パスワードで保護されたドキュメントは登録できますが、回答には反映されません。</p>
-                <p className={Style.note}>*ファイルを登録してからBotの応答に反映されるまでに、10分前後かかります。</p>
-            </div>
-            {currentShowFiles && (
-                <aside>
-                    <ul className={Style.file}>
-                        {currentShowFiles.map((item, index) => (
-                            <li key={index} className={Style.file_list}>
-                                {item.isUploaded ? (
-                                    <div className={Style.file_item}>
-                                        <div className={Style.file_item_type}>
-                                            <span className={Style.icon_file}>
-                                                <File />
-                                            </span>
-                                        </div>
-                                        <div className={Style.file_item_body}>
-                                            <p className={Style.file_item_name}>{item.file.name}</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className={Style.file_item_trash}
-                                            onClick={() => {
-                                                removeFile(index);
-                                            }}
-                                        >
-                                            <span className={Style.icon_trash}>
-                                                <Trash />
-                                            </span>
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className={Style.file_item}>
-                                        <div className={Style.file_item_type}>
-                                            <Image
-                                                src="/spinner.gif"
-                                                width={20}
-                                                height={20}
-                                                alt="loading"
-                                                unoptimized={true}
-                                            />
-                                        </div>
-                                        <div className={Style.file_item_body}>
-                                            <p className={Style.file_item_name}>
-                                                {item.file.name}をアップロードしています…
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
-                </aside>
+            {!uploadComp ? (
+                <>
+                    {isLoading ? (
+                        <>
+                            <div>
+                                <p>アップロード中です。</p>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <header className={Style.modalPanelHeader}>
+                                    <h3>ファイルのアップロード</h3>
+                                    <p>{props.bot}</p>
+                                    <button type="button" onClick={props.close}>×</button>
+                                </header>
+                                <div
+                                    {...getRootProps()}
+                                    className={`${Style.file_upload} ${setDropZoneStyle()}`}
+                                >
+                                    <input {...getInputProps()} />
+                                    <p className={Style.file_name}>
+                                        {isDragAccept
+                                            ? "ファイルをアップロードします。"
+                                            : isDragReject
+                                                ? "エラー"
+                                                : "ファイルを登録してください。"
+                                        }
+                                    </p>
+                                    <p className={Style.file_name}>
+                                        {isDragReject
+                                            ? "このファイル形式のアップロードは許可されていません。"
+                                            : "ファイルを選択するか、ドラッグアンドドロップ（複数選択可）してください。"
+                                        }
+                                    </p>
+                                    <button disabled={isDragReject}>ファイルを選択</button>
+                                </div>
+                                <p className={Style.note}>*アップロード可能なファイル形式（*.pdf、*.doc、*.docx、*.xls、*.xlsx、*.ppt、*.pptx）</p>
+                                <p className={Style.caution}>*1ファイルサイズの上限は100MBまでです。</p>
+                                <p className={Style.note}>*パスワードで保護されたドキュメントは登録できますが、回答には反映されません。</p>
+                                <p className={Style.note}>*ファイルを登録してからBotの応答に反映されるまでに、10分前後かかります。</p>
+                            </div>
+                            {currentShowFiles && (
+                                <aside>
+                                    <ul className={Style.file}>
+                                        {currentShowFiles.map((item, index) => (
+                                            <li key={index} className={Style.file_list}>
+                                                {item.isUploaded ? (
+                                                    <div className={Style.file_item}>
+                                                        <div className={Style.file_item_type}>
+                                                            <span className={Style.icon_file}>
+                                                                <File />
+                                                            </span>
+                                                        </div>
+                                                        <div className={Style.file_item_body}>
+                                                            <p className={Style.file_item_name}>{item.file.name}</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className={Style.file_item_trash}
+                                                            onClick={() => {
+                                                                removeFile(index);
+                                                            }}
+                                                        >
+                                                            <span className={Style.icon_trash}>
+                                                                <Trash />
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className={Style.file_item}>
+                                                        <div className={Style.file_item_type}>
+                                                            <Image
+                                                                src="/spinner.gif"
+                                                                width={20}
+                                                                height={20}
+                                                                alt="loading"
+                                                                unoptimized={true}
+                                                            />
+                                                        </div>
+                                                        <div className={Style.file_item_body}>
+                                                            <p className={Style.file_item_name}>
+                                                                {item.file.name}をアップロードしています…
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </aside>
+                            )}
+                            <footer className={Style.FileUploadBtnArea}>
+                                <button onClick={makeApiRequest}>ファイルのアップロード</button>
+                            </footer>
+                        </>
+                    )}
+                </>
+            ) : (
+                <>
+                    <p>登録が完了しました。</p>
+                    <button>OK</button>
+                </>
             )}
-            <footer className={Style.FileUploadBtnArea}>
-                <button onClick={makeApiRequest}>ファイルのアップロード</button>
-            </footer>
         </div>
     );
 };

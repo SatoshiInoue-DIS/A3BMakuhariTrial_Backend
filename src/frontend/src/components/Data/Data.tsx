@@ -21,3 +21,15 @@ export const data = [
       stock: "2"
     }
 ];
+
+// export type Data = {
+//   col1: string;
+//   col2: string;
+// };
+
+export type Data = {
+    filename: string;
+    size: number;
+    last_modified: string;
+    delete: boolean | undefined;
+};
