@@ -1,10 +1,10 @@
 import { 
     UploadRequest, UploadResponse,
-    SevedFileRequest, SevedFileResponse
+    SevedFileRequest, SevedFileResponse, DeleteResponse
 } from "./models";
 
 //Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
-export async function deleteApi(options: {filename: string}, bot:string): Promise<UploadResponse> {
+export async function deleteApi(options: {filename: string}[], bot:string): Promise<DeleteResponse> {
     const response = await fetch("http://localhost:5000/delete", {
         method: "POST",
         headers: {
@@ -13,9 +13,10 @@ export async function deleteApi(options: {filename: string}, bot:string): Promis
         body: JSON.stringify({ options, bot: bot })
     });
 
-    const parsedResponse: UploadResponse = await response.json();
+    const parsedResponse: DeleteResponse = await response.json();
     if (response.status > 299 || !response.ok) {
-        throw Error(parsedResponse.error || "Unknown error");
+        const errorMessages = parsedResponse.map(res => res.error).filter(error => error !== undefined);
+        throw Error(errorMessages.length > 0 ? errorMessages.join(", ") : "Unknown error");
     }
 
     return parsedResponse;

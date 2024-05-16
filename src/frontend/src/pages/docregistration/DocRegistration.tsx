@@ -1,9 +1,10 @@
 import styles from './DocRegistration.module.css';
 import DocRegistrationModal from '@/components/DocRegistrationModal';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Column } from "react-table";
 import Table from "../../components/Table/Table"
-import { SevedFileResponse, savedfileApi, SevedFileRequest } from "../../api";
+import { SevedFileResponse, savedfileApi, SevedFileRequest, deleteApi } from "../../api";
+import { stringify } from 'querystring';
 
 const bots = ["幕張トライアル", "新卒オープン", "運営マニュアル"];
 
@@ -85,10 +86,21 @@ const summarizeData = (data: []): any => {
     return resultList;
 }
 
+const makeApiRequest = async (filename: {filename: string}[], bot:string) => {
+    try {
+        const response = await deleteApi(filename, bot);
+        
+    } catch (e) {
+        alert(`削除処理中にエラーが発生しました: ${e}`);
+    } finally {
+    }
+};
+
 const DocRegistration = () => {
     const [selectedOption, setSelectedOption] = useState<string>('幕張トライアル')
     const [fileinfo, setFileinfo] = useState<SevedFileResponse[]>([]);
-    const [selected, setSelected] = useState<Array<SevedFileResponse>>([]);
+    const [selectedRows, setSelectedRows] = useState<Array<SevedFileResponse>>([]);
+    const [selectedFilenames, setSelectedFilenames] = useState<{ filename: string }[]>([{ filename: "" }]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -111,6 +123,15 @@ const DocRegistration = () => {
         setSelectedOption(event.target.value)
     }
 
+    const handleSelectedRows = useCallback((selected: SevedFileResponse[]) => {
+        setSelectedRows(selected);
+    },[]);
+
+    useEffect(() => {
+        const filenames = selectedRows.map(row => ({ filename: row.filename }));
+        setSelectedFilenames(filenames);
+    }, [selectedRows]);
+
     return (
         <div className={styles.container}>
             <div className={styles.containerTable}>
@@ -130,7 +151,7 @@ const DocRegistration = () => {
                         <DocRegistrationModal {...{bot:selectedOption}}/>
                     </div>
                     <div className={styles.registrationDeletionArea}>
-                        <button>一括削除</button>
+                        <button onClick={() => makeApiRequest(selectedFilenames, selectedOption)}>一括削除</button>
                     </div>
                 </div>
                 <hr className={styles.border}></hr>
@@ -138,7 +159,7 @@ const DocRegistration = () => {
                     <div className={styles.displayRegisteredDataArea}>
                         <section>
                             {/* <Table tableColumns={columns} files={fileinfo} /> */}
-                            <Table columns={columns} data={fileinfo} callback={setSelected} bot={selectedOption}/>
+                            <Table columns={columns} data={fileinfo} callback={handleSelectedRows} bot={selectedOption}/>
                         </section>
                     </div>
                 </div>

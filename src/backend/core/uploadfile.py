@@ -30,8 +30,6 @@ SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
 AZURE_STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
-
-
 AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME")
 
 AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
@@ -154,55 +152,10 @@ def create_search_index():
     else:
         print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）はすでに存在します。")
 
-    # print("ファイルを処理しています...")
-
-# Container内のすべてのBLOBを取得するし、名前だけを返す
-def getAllFiles(bot):
-    container_client = blob_service.get_container_client(bot)
-    blob_list = container_client.list_blobs().by_page()
-    # Blobの名前のみを含むリストの作成
-    blob_names = []
-    # Blobの名前をリストに追加
-    for page in blob_list:
-        for blob in page:
-            blob_names.append(blob.name)
-    return blob_names
-
-# 指定したBlobデータをContainer内から論理的な削除をする
-def deleteBlob(files, container):
-    for blob in files:
-        blob_client = blob_service.get_blob_client(container=container, blob=blob)
-        blob_client.delete_blob()
-    return True
-
 # インデクサーを実行する
 def run_indexer():
     result = indexers_client.run_indexer(AZURE_SEARCH_INDEXER)
     return result
-
-# 検索インデックスから削除したBlobデータに紐づいたインデックスを削除する
-# sourcefileフィールドに検索をかけ、出てきたインデックスのidを取得しそのidを元に削除(指定するきKeyは一意である必要がある為)
-def removeSearchIndex(files):
-    success = True
-    delete_ids = []
-    for file in files:
-        try:
-            # 検索クエリを定義
-            search_query = file
-            # 検索実行
-            search_results = search_client.search(search_text=search_query, search_fields=["sourcefile"], search_mode="all", select=["id"])
-            # 検索結果からidを取得
-            for result in search_results:
-                document_id = result["id"]
-                delete_ids.append(document_id)
-                search_client.delete_documents(documents=[{"id":document_id}])
-        except Exception as e:
-            # エラー処理
-            print(f"エラー：{e}")
-            success = False
-    return success
-
-
 
 # ファイル名とページ番号からBlobの名前を生成します。
 def blob_name_from_file_page(filename, page = 0):
@@ -210,8 +163,6 @@ def blob_name_from_file_page(filename, page = 0):
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
     else:
         return os.path.basename(filename)
-
-
 
 #  直接blobのURLを見に行きPDFからテキストを抽出します。Azure Form Recognizerサービスを使用します。
 def get_document_text(page, index):
@@ -386,8 +337,6 @@ def split_text(page_map):
     else:
     # if start + SECTION_OVERLAP >= length:
         yield (all_text[start:end], find_page(start))
-
-
 
 # セクションを検索インデックスにインデックスします。
 def index_sections(filename, sections):

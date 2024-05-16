@@ -77,10 +77,11 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
                 {
                     Header: "削除",
                     Cell: ({ row }) => {
-                        const fileName = row.original.filename
+                        const fileName = row.original.filename;
+                        const fileArray = [{ filename: fileName }]
                         return (
                             <div>
-                                <OneDelete filename={fileName}/>
+                                <OneDelete filename={fileArray}/>
                             </div>
                         );
                     }
@@ -89,11 +90,11 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
         }
     );
     
-    const OneDelete = ( filename: { filename: string } ) => {
+    const OneDelete = ({ filename }: { filename: { filename: string }[] }) => {
         return <button onClick={() => makeApiRequest(filename, bot)}>削除</button>
     }
     
-    const makeApiRequest = async (filename: {filename: string}, bot:string) => {
+    const makeApiRequest = async (filename: {filename: string}[], bot:string) => {
         try {
             const response = await deleteApi(filename, bot);
             

@@ -9,6 +9,11 @@ export type UploadResponse = {
     error?: string;
 }
 
+export type DeleteResponse = {
+    answer: boolean;
+    error?: string;
+}[]
+
 export type SevedFileRequest = {
     bot: string;
 }

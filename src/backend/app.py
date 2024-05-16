@@ -11,6 +11,8 @@ from azure.search.documents.indexes.models import *
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from core.uploadfile import *
 from core.savedfile import *
+from core.deletefile import *
+
 
 # configure_azure_monitor()
 app = Flask(__name__)
@@ -22,24 +24,36 @@ FlaskInstrumentor().instrument_app(app)
 # Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
 @app.route("/delete", methods=["POST"])
 def delete():
-    print(request.json["bot"] + "から" + request.json["options"]["filename"] + "を削除する")
-    deleteFileName = request.json["options"]["filename"]
-    baseName = os.path.splitext(deleteFileName)[0]
-    extension = os.path.splitext(deleteFileName)[1]
     botname = request.json["bot"]
+    if botname == "幕張トライアル":
+        containername = "test"
+    else:
+        containername = ""
+    files = request.json["options"]
+    answers = []
     try:
-        if botname == "幕張トライアル":
-            containername = "test"
+        for f in files:
+            filename = f["filename"]
+            print(botname + "から" + filename + "を削除する")
+            deleteFileName = filename
+            baseName = os.path.splitext(deleteFileName)[0]
+            extension = os.path.splitext(deleteFileName)[1]
             blobList = getAllFiles(containername)
-            selectedFiles = [file for file in blobList if baseName in file and file.lower().endswith(extension)]
+            # 正規表現パターン：baseNameで始まり、-（ハイフン）の後に数字が続き、拡張子で終わる(例:test-1.pdf)
+            pattern = re.compile(rf"^{re.escape(baseName)}-\d+{re.escape(extension)}$", re.IGNORECASE)
+            # パターンにマッチするファイルを抽出
+            selectedFiles = [file for file in blobList if pattern.match(file)]
+            # selectedFiles = [file for file in blobList if baseName in file and file.lower().endswith(extension)]
             deleteResultOfBlob = deleteBlob(selectedFiles, containername)
             deleteResultOfIndex = removeSearchIndex(selectedFiles)
             if deleteResultOfBlob and deleteResultOfIndex:
                 answer = { "answer": True }
+                answers.append(answer)
             else:
                 answer = { "answer": False }
+                answers.append(answer)
             # bbb = run_indexer()
-        return jsonify(answer)
+        return jsonify(answers)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
