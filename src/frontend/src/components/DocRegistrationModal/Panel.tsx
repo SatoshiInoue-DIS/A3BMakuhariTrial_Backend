@@ -97,7 +97,7 @@ const Panel: NextPage<Props> = (props) => {
                         message = `${file.name} のファイルサイズが大きすぎます。100MB以下のファイルをアップロードしてください。`;
                         break;
                     case "file-invalid-type":
-                        message = `${file.name} のファイル形式が許可されていません。許可されているファイル形式は jpg, png, pdf, doc, docx, xls, xlsx, ppt, pptx です。`;
+                        message = `${file.name} のファイル形式が許可されていません。許可されているファイル形式は jpg, jpeg, png, pdf, doc, docx, xls, xlsx, ppt, pptx, txt です。`;
                         break;
                     default:
                         break;
@@ -112,9 +112,23 @@ const Panel: NextPage<Props> = (props) => {
             onDrop,
             onDropRejected,
             accept: {
+                // 画像
                 "image/jpeg": [],
                 "image/png": [],
+                // テキスト
+                "text/plain": [],
+                // PDF
                 "application/pdf": [],
+                // ワード
+                "application/msword": [],
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
+                // パワーポイント
+                "application/vnd.ms-powerpoint": [],
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation": [],
+                // エクセル
+                "application/vnd.ms-excel": [],
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [],
+
             },
             maxSize: 100 * 1024 * 1024, // 100MB
         });
@@ -192,7 +206,7 @@ const Panel: NextPage<Props> = (props) => {
                                                 : "ファイルを登録してください。"
                                         }
                                     </p>
-                                    <p className={Style.file_name}>
+                                    <p>
                                         {isDragReject
                                             ? "このファイル形式のアップロードは許可されていません。"
                                             : "ファイルを選択するか、ドラッグアンドドロップ（複数選択可）してください。"
@@ -200,8 +214,9 @@ const Panel: NextPage<Props> = (props) => {
                                     </p>
                                     <button disabled={isDragReject}>ファイルを選択</button>
                                 </div>
-                                <p className={Style.note}>*アップロード可能なファイル形式（*.pdf、*.doc、*.docx、*.xls、*.xlsx、*.ppt、*.pptx）</p>
+                                <p className={Style.note}>*アップロード可能なファイル形式（*.pdf、*.doc、*.docx、*.xls、*.xlsx、*.ppt、*.pptx、*.txt、*.png、*.jpg、*.jpeg）</p>
                                 <p className={Style.caution}>*1ファイルサイズの上限は100MBまでです。</p>
+                                <p className={Style.note}>*Excelファイルを登録する場合、印刷時のページ設定をしてから登録させてください。</p>
                                 <p className={Style.note}>*パスワードで保護されたドキュメントは登録できますが、回答には反映されません。</p>
                                 <p className={Style.note}>*ファイルを登録してからBotの応答に反映されるまでに、10分前後かかります。</p>
                             </div>
@@ -264,7 +279,7 @@ const Panel: NextPage<Props> = (props) => {
             ) : (
                 <>
                     <p>登録が完了しました。</p>
-                    <button>OK</button>
+                    <button type="button" onClick={props.close}>OK</button>
                 </>
             )}
         </div>

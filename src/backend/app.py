@@ -86,55 +86,21 @@ def upload():
         index = ""
         answer = { "answer": False }
         return jsonify(answer)
+    if 'file' not in request.files:
+        answer = { "answer": False }
+        return jsonify(answer)
     try:
-        if 'file' not in request.files:
-            answer = { "answer": False }
-            return jsonify(answer)
         # インデックスの存在を確認。なければ作成
         create_search_index()
         # ファイルのバイナリーデータ
         upload_files = request.files.getlist("file")
         for upload_file in upload_files:
-            # ファイルをBlobストレージに保存し、ファイル名を取得
-            organized_allpages = upload_blobs(upload_file)
-            # ファイル名の抽出
-#             filename = upload_file.filename
-#             # ファイルを保存するディレクトリパスを指定
-#             save_path = f"../../data/" + filename
-# # デバック時は以下のディレクトリに設定する
-#             # save_path = f"data/" + filename
-#             # if not os.path.exists(save_path):
-#             #     os.makedirs(save_path)
-#             # ファイルを指定したパスに保存
-#             # upload_file.save(save_path + "\\" + filename)
-#             # PDFの場合
-#              # PDFを開く
-#             pdf_reader = pypdf.PdfReader(upload_file)
-#             pdf_writer = pypdf.PdfWriter()
-        
-#             # ページをコピー
-#             for page in pdf_reader.pages:
-#                 pdf_writer.add_page(page)
-            
-#             # 新しいPDFファイルに書き込む
-#             output_file_path = save_path
-#             with open(output_file_path, 'wb') as output_file:
-#                 pdf_writer.write(output_file)
-
-#             print(f"\t ('{filename}')をtempフォルダに保存しました。")
-
-
-#             # 保存されたディレクトリパスを指定
-#             saved_path = f"../../data"
-# # デバック時は以下のディレクトリに設定する
-#             # saved_path = f"data"
-#             # 保存されたファイルのURL
-#             file_url = saved_path + "/" + filename
+            original_extension = os.path.splitext(upload_file.filename)[1].lower() 
+            organized_allpages = upload_blobs(upload_file, original_extension)
             for page in organized_allpages:
-                page_map = get_document_text(page, index)
+                page_map = get_document_text(page, index, original_extension)
                 sections = create_sections(os.path.basename(page), page_map)
                 index_sections(os.path.basename(page), sections)
-
             answer = { "answer": True }
         return jsonify(answer)
     except Exception as e:

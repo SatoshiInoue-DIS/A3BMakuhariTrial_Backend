@@ -3,6 +3,12 @@ import io
 import html
 import re
 import base64
+import hashlib
+import pythoncom
+import tempfile
+import win32com.client
+from win32com.client import constants
+from docx2pdf import convert
 
 from dotenv import load_dotenv
 from pypdf import PdfReader, PdfWriter
@@ -25,7 +31,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 # .envファイルの内容を読み込見込む
 load_dotenv()
 
-MAX_SECTION_LENGTH = 1000
+MAX_SECTION_LENGTH = 500
 SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
@@ -96,16 +102,6 @@ def generate_embeddings(text):
     embeddings = response.data[0].embedding
     return embeddings
 
-# コンテナーの作成
-# container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
-# container_client.create_container()
-# Blobのアップロード
-# blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name)
-# with open(local_file_path, "rb") as data:
-#     blob_client.upload_blob(data, overwrite=True)
-
-# print("ファイルがアップロードされました。")
-
 # インデックスを作成するメソッド
 def create_search_index():
     if AZURE_SEARCH_INDEX not in index_client.list_index_names():
@@ -157,55 +153,40 @@ def run_indexer():
     result = indexers_client.run_indexer(AZURE_SEARCH_INDEXER)
     return result
 
+# 各ファイルにページ番号の取り付けsourcepage
+def add_page_blob_name(filename, page = 0):
+    extension = os.path.splitext(filename)[1].lower()
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+    sourcepage = base_name + f"-{page}" + extension
+    return sourcepage
+
 # ファイル名とページ番号からBlobの名前を生成します。
 def blob_name_from_file_page(filename, page = 0):
     if os.path.splitext(filename)[1].lower() == ".pdf":
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
+    elif os.path.splitext(filename)[1].lower() in (".xls", ".xlsx"):
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".xlsx"
+    elif os.path.splitext(filename)[1].lower() == ".txt":
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".txt"
+    elif os.path.splitext(filename)[1].lower() == ".png":
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".png"
+    elif os.path.splitext(filename)[1].lower() in (".jpg", ".jpeg"):
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".jpg"
+    elif os.path.splitext(filename)[1].lower() in (".doc", ".docx"):
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
+    elif os.path.splitext(filename)[1].lower() in (".ppt", ".pptx"):
+        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pptx"
     else:
         return os.path.basename(filename)
 
-#  直接blobのURLを見に行きPDFからテキストを抽出します。Azure Form Recognizerサービスを使用します。
-def get_document_text(page, index):
-    offset = 0
+# Document intelligenceで分析した結果をインデックスに登録する為のチャンク分解や表があればHTML化させる
+def get_page_map(results, offset):
     page_map = []
-    blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{index}/{page}"
-    # filename = upload_file.filename
-    # print(f"Azure Form Recognizer を使用して '{filename}' からテキストを抽出します")
-    # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
-    form_recognizer_client = DocumentAnalysisClient(
-        endpoint=f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/",
-        credential=formrecognizer_creds,
-        # 適当
-        # headers={"x-ms-useragent": "azure-search-chat-demo/1.0.0"}
-    )
-    # form_recognizer_client2 = FormRecognizerClient(f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/", formrecognizer_creds)
-    # # PDFを読み込み
-    # with open(upload_file, 'rb') as f:
-    #     content = f.read()
-    #     # OCR実行
-    #     poller = form_recognizer_client2.begin_recognize_content(content, content_type='application/pdf')
-
-    # # 結果の取り出し
-    # pages = poller.result()
-
-    # file_bytes_io = BytesIO(upload_file)
-    # file_bytes = file_bytes_io.getvalue()
-    poller = form_recognizer_client.begin_analyze_document_from_url(model_id="prebuilt-layout", document_url = blob_url)
-    # with open(upload_url, "rb") as f:
-    #     # ファイルの位置を先頭に移動する
-    #     f.seek(0)
-    #     form = f.read()
-    #     poller = form_recognizer_client.begin_analyze_document("prebuilt-layout", document = form)
-        # モデル分析機能：prebuilt-layout
-    # 分析した結果を取り出す
-    form_recognizer_results = poller.result()
-    # print ("ドキュメントにはコンテンツが含まれています: ", form_recognizer_results.content)
-
-    # 取り出した結果をページごとに分ける
-    for page_num, page in enumerate(form_recognizer_results.pages):
+    pages = results.pages
+    tables = results.tables
+    for page_num, page in enumerate(pages):
         # page_num + 1と同じpage_numberのものをtables_on_pageに代入する
-        tables_on_page = [table for table in form_recognizer_results.tables if table.bounding_regions[0].page_number == page_num + 1]
-
+        tables_on_page = [table for table in tables if table.bounding_regions[0].page_number == page_num + 1]
         # ページ内のテーブル スパンのすべての位置をマークします。
         # スパンで表されるコンテンツの 0 から始まるインデックス
         page_offset = page.spans[0].offset
@@ -221,21 +202,67 @@ def get_document_text(page, index):
                     idx = span.offset - page_offset + i
                     if idx >=0 and idx < page_length:
                         table_chars[idx] = table_id
-
         # テーブルスパン内の文字をテーブルHTMLに置き換えてページテキストを構築します
         page_text = ""
         added_tables = set()
         for idx, table_id in enumerate(table_chars):
             if table_id == -1:
-                page_text += form_recognizer_results.content[page_offset + idx]
+                page_text += results.content[page_offset + idx]
             elif table_id not in added_tables:
                 page_text += table_to_html(tables_on_page[table_id])
                 added_tables.add(table_id)
-
         page_text += " "
         page_map.append((page_num, offset, page_text))
         offset += len(page_text)
+    return page_map
 
+#  直接blobのURLを見に行きPDFからテキストを抽出します。Document intelligenceサービスを使用します。
+def get_document_text(filename, index, extension):
+    """
+    PDF →   PDF,
+    TEXT    →   TXT,
+    PNG →   PNG,
+    JPG →   JPG,
+    JPEG    →   JPG,
+    EXCEL   →   PDF,
+    WORD    →   PDF,
+    POWERPOINT  →   PDF,
+    """
+    offset = 0
+    page_map = []
+    # BLOLに保存されたファイルのURL
+    blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{index}/{filename}"
+    # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
+    form_recognizer_client = DocumentAnalysisClient(
+        endpoint=f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/",
+        credential=formrecognizer_creds,
+    )
+    # PDF、画像(PNG,JPEG,JPG)、EXCELはレイアウト分析
+    if extension in (".pdf", ".png", ".jpeg", ".jpg", ".xls", ".xlsx"):
+        print(f"Document intelligence のレイアウトモデルを使用して '{filename}' からテキストを抽出します")
+        poller = form_recognizer_client.begin_analyze_document_from_url(model_id="prebuilt-layout", document_url = blob_url)
+        # 分析した結果を取り出す モデル分析機能：prebuilt-layout
+        form_recognizer_results = poller.result()
+        # 取り出した結果をページごとに分ける
+        page_map = get_page_map(form_recognizer_results, offset)
+    # WORD、POWERPOINTはリード分析
+    elif extension in (".doc", ".docx", ".ppt", ".pptx"):
+        print(f"Document intelligence のリードモデルを使用して '{filename}' からテキストを抽出します")
+        poller = form_recognizer_client.begin_analyze_document_from_url(model_id="prebuilt-read", document_url = blob_url)
+        # 分析した結果を取り出す モデル分析機能：prebuilt-read
+        form_recognizer_results = poller.result()
+        # 取り出した結果をページごとに分ける
+        page_map = get_page_map(form_recognizer_results, offset)
+    # テキストの場合はDocument intelligenceを使わない
+    elif extension == ".txt":
+        print(f"'{filename}' のテキストを読み取ります")
+        blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+        blob_client = blob_container.get_blob_client(filename)
+        download_stream = blob_client.download_blob(encoding='UTF-8')
+        page_text = download_stream.readall()
+        page_num = 0
+        offset = 0
+        page_map.append((page_num, offset, page_text))
     return page_map
 
 # テーブルオブジェクトをHTML形式の文字列に変換します。
@@ -254,30 +281,37 @@ def table_to_html(table):
     table_html += "</table>"
     return table_html
 
+# ハッシュ化
+def convert_japanese_to_hash(match):
+    # 日本語部分を取得
+    japanese_text = match.group(0)
+    # ハッシュ化
+    hash_object = hashlib.sha256(japanese_text.encode('utf-8'))
+    hash_str = hash_object.hexdigest()
+    # ハッシュ値の一部を返す（長すぎるので最初の8文字を使用）
+    return hash_str[:8]
+
 # ページマップからセクションオブジェクトのジェネレータを作成します。
 def create_sections(filename, page_map):
     for i, (section, pagenum) in enumerate(split_text(page_map)):
+        # 日本語部分を変換する
+        temp_key = re.sub(r'[^\x00-\x7F]', convert_japanese_to_hash, filename)
+        key = re.sub("[^0-9a-zA-Z_-]","_",f"{temp_key}-{i}")
         yield {
-            "id": re.sub("[^0-9a-zA-Z_-]","_",f"{filename}-{i}"),
+            "id": key,
             "content": section,
             # "content": page_map[i][2],
             "category": "document",
-            "sourcepage": blob_name_from_file_page(filename, pagenum),
+            "sourcepage": add_page_blob_name(filename, i),
             "sourcefile": filename,
             "titleVector": generate_embeddings(filename),
             "contentVector": generate_embeddings(section)
         }
 
-# Base64エンコードを行う
-def encode(filename):
-    encoded_blob_name = base64.urlsafe_b64encode(filename.encode()).decode()
-    return encoded_blob_name
-
 # ページマップからテキストをセクションに分割します。
 def split_text(page_map):
     SENTENCE_ENDINGS = [".", "!", "?"]
     WORDS_BREAKS = [",", ";", ":", " ", "(", ")", "[", "]", "{", "}", "\t", "\n"]
-    # print(f"「'{filename}'」をセクションに分割しています")
 
     def find_page(offset):
         l = len(page_map)
@@ -356,152 +390,217 @@ def index_sections(filename, sections):
         succeeded = sum([1 for r in results if r.succeeded])
         print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功")  
 
+
+def pdf_uploader(blob_container, upload_file, filename, extension):
+    organized_allpages = []
+    reader = PdfReader(upload_file)
+    pages = reader.pages
+    for i in range(len(pages)):
+        blob_name = blob_name_from_file_page(filename, i)
+        print(f"\t {i} ページの BLOB をアップロードしています -> {blob_name}")
+        f = io.BytesIO()
+        writer = PdfWriter()
+        writer.add_page(pages[i])
+        writer.write(f)
+        f.seek(0)
+        # メタデータを設定
+        metadata = makeMetaData(filename, extension)
+        blob_container.upload_blob(blob_name, f, overwrite=True, metadata=metadata)
+        organized_allpages.append(blob_name)
+    return organized_allpages
+
 # 指定されたファイルをAzure Blob Storageにアップロードします。PDFの場合、各ページを個別のBlobとしてアップロードします。
-def upload_blobs(upload_file):
+def upload_blobs(upload_file, extension):
     blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
     # コンテナーがなければ作成
     if not blob_container.exists():
         blob_container.create_container()
+        print(f"{AZURE_STORAGE_CONTAINER_NAME}コンテナーを作成しました")
+    # ファイル名
     filename = upload_file.filename
+    # 整理された全ページを入れる
     organized_allpages = []
     # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
-    if os.path.splitext(filename)[1].lower() == ".pdf":
-        reader = PdfReader(upload_file)
-        pages = reader.pages
-        for i in range(len(pages)):
-            blob_name = blob_name_from_file_page(filename, i)
-            print(f"\t {i} ページの BLOB をアップロードしています -> {blob_name}")
-            f = io.BytesIO()
-            writer = PdfWriter()
-            writer.add_page(pages[i])
-            writer.write(f)
-            f.seek(0)
-            blob_container.upload_blob(blob_name, f, overwrite=True)
-            organized_allpages.append(blob_name)
-    else:
+    if extension == ".pdf":
+        organized_allpages = pdf_uploader(blob_container, upload_file, filename, extension)
+    # ファイルがエクセルの場合、各シートごとにPDFに変換し、各ページを個別のBLOBにアップロードします。
+    elif extension in (".xls", ".xlsx"):
+        # COMオブジェクトの初期化
+        pythoncom.CoInitialize()
+        # Excelアプリケーションを開く
+        excel = win32com.client.Dispatch("Excel.Application")
+        # Excelウィンドウを非表示にする
+        excel.Visible = False
+        # 入力ストリームを先頭にリセット
+        upload_file.seek(0)
+        # Excelファイルのバイトデータ
+        excel_data = upload_file.read()
+        try:
+            # 一時ファイルとしてExcelデータを保存
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel_file:
+                tmp_excel_file.write(excel_data)
+                tmp_excel_file_path = tmp_excel_file.name
+            # Excelファイルを開く
+            wb = excel.Workbooks.Open(tmp_excel_file_path)
+            tmp_pdf_file_dir = os.path.dirname(tmp_excel_file_path)
+            # 各シートをPDFに変換する
+            for sheet in wb.Sheets:
+                # 新しいPDFファイル名を生成（[エクセルファイル名]－[シート名].pdf）
+                pdf_file_name = os.path.splitext(os.path.basename(filename))[0] + f"-{sheet.name}" + ".pdf"
+                # PDF変換して保存する場所
+                tmp_pdf_file_path = tmp_pdf_file_dir + "/" + pdf_file_name
+                # シートをPDFに変換する
+                sheet.ExportAsFixedFormat(0, tmp_pdf_file_path, 0, 1, 0, 1, sheet.PageSetup.Pages.Count, 0)
+                print(f"Excelファイルのシート {sheet.name} を PDF に変換しました。")
+                # 生成されたPDFの内容を読み込む
+                with open(tmp_pdf_file_path, 'rb') as pdf_file:
+                    organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, extension)
+                # PDFの一時ファイルを削除する
+                os.remove(tmp_pdf_file_path)
+        finally:
+            # Excelファイルを閉じる
+            wb.Close(False)
+            # Excelアプリケーションを終了
+            excel.Quit()
+            # Excelの一時ファイルを削除する
+            os.remove(tmp_excel_file_path)
+            # 終了した後はこれを呼び出す
+            pythoncom.CoUninitialize()
+    # ファイルがワードの場合、PDFに変換し、各ページを個別のBLOBにアップロードします。
+    elif extension in (".doc", ".docx"):
+        # COMオブジェクトの初期化
+        pythoncom.CoInitialize()
+        # 入力ストリームを先頭にリセット
+        upload_file.seek(0)
+        # Wordファイルのバイトデータ
+        word_data = upload_file.read()
+        try:
+            # 一時ファイルとしてWordデータを保存
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_word_file:
+                tmp_word_file.write(word_data)
+                tmp_word_file_path = tmp_word_file.name
+            # PDF出力用の一時ファイルを作成
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf_file:
+                tmp_pdf_file_path = tmp_pdf_file.name
+            # WordファイルをPDFに変換
+            convert(tmp_word_file_path, tmp_pdf_file_path)
+            print(f"Wordファイル {filename} をPDFに変換しました")
+            # Wordの一時ファイルを削除する
+            os.remove(tmp_word_file_path)
+            # 生成されたPDFの内容を読み込む
+            with open(tmp_pdf_file_path, 'rb') as pdf_file:
+                organized_allpages = pdf_uploader(blob_container, pdf_file, filename, extension)
+        finally:
+            # PDFの一時ファイルを削除する
+            os.remove(tmp_pdf_file_path)
+            # COMオブジェクトの解放
+            pythoncom.CoUninitialize()
+    # ファイルがパワーポイントの場合、ノード付きPDFに変換し、各ページを個別のBLOBにアップロードします。
+    elif extension in (".ppt", ".pptx"):
+        # COMオブジェクトの初期化
+        pythoncom.CoInitialize()
+        # makepy ユーティリティを起動 COM の定数を利用するため
+        win32com.client.gencache.EnsureDispatch('PowerPoint.Application')
+        # Powerpointアプリケーションを開く
+        powerpoint = win32com.client.Dispatch("PowerPoint.Application")
+        # 入力ストリームを先頭にリセット
+        upload_file.seek(0)
+        # Powerpointファイルのバイトデータ
+        powerpoint_data = upload_file.read()
+        try:
+            # 一時ファイルとしてPowerpointデータを保存
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp_powerpoint_file:
+                tmp_powerpoint_file.write(powerpoint_data)
+                tmp_powerpoint_file_path = tmp_powerpoint_file.name
+            tmp_pdf_file_dir = os.path.dirname(tmp_powerpoint_file_path)
+            # 新しいPDFファイル名を生成
+            pdf_file_name = os.path.splitext(os.path.basename(filename))[0] + ".pdf"
+            # PDF変換して保存する場所
+            tmp_pdf_file_path = tmp_pdf_file_dir + "/" + pdf_file_name
+            # Powerpointファイルを開きPDF形式で保存
+            presentation = powerpoint.Presentations.Open(tmp_powerpoint_file_path, WithWindow=False)
+            # PrintOptionsを設定してノート付きのレイアウトにする
+            presentation.PrintOptions.OutputType = constants.ppPrintOutputNotesPages
+            # PDFに変換する
+            presentation.ExportAsFixedFormat(
+                tmp_pdf_file_path,  #エクスポートするPDFファイルのパス
+                constants.ppFixedFormatTypePDF,  #エクスポートするファイルの形式
+                PrintRange=None,  #印刷範囲
+                Intent=constants.ppFixedFormatIntentPrint,  #エクスポートの品質.印刷用
+                HandoutOrder=constants.ppPrintHandoutVerticalFirst,  #配布資料の順序.垂直方向
+                OutputType=constants.ppPrintOutputNotesPages,  #出力形式.ノート付きのスライド
+                RangeType=constants.ppPrintAll,  #印刷するスライドの範囲.すべてのスライド
+            )
+            print(f"PowerPointファイル {filename} をPDFに変換しました")
+            # 生成されたPDFの内容を読み込む
+            with open(tmp_pdf_file_path, 'rb') as pdf_file:
+                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, extension)
+            # PDFの一時ファイルを削除する
+            os.remove(tmp_pdf_file_path)
+        finally:
+            # Powerpointファイルを閉じる
+            presentation.Close()
+            # Powerpointアプリケーションを終了
+            powerpoint.Quit()
+            # Powerpointの一時ファイルを削除する
+            os.remove(tmp_powerpoint_file_path)
+            # 終了した後はこれを呼び出す
+            pythoncom.CoUninitialize()
+    # ファイルがテキスト・画像(.txt,.png,.jpg,.jpeg)の場合、そのままBLOBにアップロードします。
+    else :
+        page = 0
         blob_name = blob_name_from_file_page(filename)
-        blob_container.upload_blob(blob_name, upload_file, overwrite=True)
+        # メタデータを設定
+        metadata = makeMetaData(filename, extension)
+        blob_container.upload_blob(blob_name, upload_file, overwrite=True, metadata=metadata)
+        # blob_container.upload_blob(blob_name, upload_file, overwrite=True)
         organized_allpages.append(blob_name)
-        # upload_file.close()
     print(f"\t Azure Blob Starageへ {filename} の書き込みが終わりました。")
     return organized_allpages
 
+# メタデータの作成
+def makeMetaData(sheet_name: str, extension: str) -> dict[str, str]:
+    if extension == ".pdf":
+        original_file_format = "PDF"
+        after_conversion_file_format = "PDF"
+        analysis_model = "prebuilt-layout"
+    elif extension in (".xls", ".xlsx"):
+        original_file_format = "EXCEL"
+        after_conversion_file_format = "PDF"
+        analysis_model = "prebuilt-layout"
+    elif extension == ".txt":
+        original_file_format = "TEXT"
+        after_conversion_file_format = "TEXT"
+        analysis_model = "readall"
+    elif extension == ".png":
+        original_file_format = "PNG"
+        after_conversion_file_format = "PNG"
+        analysis_model = "prebuilt-layout"
+    elif extension in (".jpeg", ".jpg"):
+        original_file_format = "JPG"
+        after_conversion_file_format = "JPG"
+        analysis_model = "prebuilt-layout"
+    elif extension in (".doc", ".docx"):
+        original_file_format = "WORD"
+        after_conversion_file_format = "PDF"
+        analysis_model = "prebuilt-read"
+    elif extension in (".ppt", ".pptx"):
+        original_file_format = "POWERPOINT"
+        after_conversion_file_format = "PDF"
+        analysis_model = "prebuilt-read"
+    encode_sheet_name = encode_metadata_value(sheet_name)
+    return {
+        # 取り込み時のファイル名
+        "originalFileName": encode_sheet_name,
+        # 取り込み時のファイル形式
+        "originalFileFormat": original_file_format,
+        # 変換後のファイル形式
+        "afterConversionFileFormat": after_conversion_file_format,
+        # 解析するFormRecognizerのモデル
+        "analysisModel": analysis_model,
+    }
 
-
-
-# # ローカル ファイル パスからブロック BLOB をアップロードする
-# def upload_blob_file(self, blob_service_client: BlobServiceClient, AZURE_STORAGE_CONTAINER_NAME: str):
-#     container_client = blob_service_client.get_container_client(container=AZURE_STORAGE_CONTAINER_NAME)
-#     with open(file=os.path.join('filepath', 'filename'), mode="rb") as data:
-#         blob_client = container_client.upload_blob(name="sample-blob.txt", data=data, overwrite=True)
-
-# # ストリームからブロック BLOB をアップロードする
-# def upload_blob_stream(self, blob_service_client: BlobServiceClient, AZURE_STORAGE_CONTAINER_NAME: str):
-#     blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob="sample-blob.txt")
-#     input_stream = io.BytesIO(os.urandom(15))
-#     blob_client.upload_blob(input_stream, blob_type="BlockBlob")
-
-# # ブロック BLOB にバイナリ データをアップロードする
-# def upload_blob_data(self, blob_service_client: BlobServiceClient, contAZURE_STORAGE_CONTAINER_NAMEainer_name: str):
-#     blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob="sample-blob.txt")
-#     data = b"Sample data for blob"
-
-#     # Upload the blob data - default blob type is BlockBlob
-#     blob_client.upload_blob(data, blob_type="BlockBlob")
-
-# # インデックス タグ付きのブロック BLOB をアップロードする
-# def upload_blob_tags(self, blob_service_client: BlobServiceClient, AZURE_STORAGE_CONTAINER_NAME: str):
-#     container_client = blob_service_client.get_container_client(container=AZURE_STORAGE_CONTAINER_NAME)
-#     sample_tags = {"Content": "image", "Date": "2022-01-01"}
-#     with open(file=os.path.join('filepath', 'filename'), mode="rb") as data:
-#         blob_client = container_client.upload_blob(name="sample-blob.txt", data=data, tags=sample_tags)
-
-# # アップロード時のデータ転送オプションの指定
-# def upload_blob_transfer_options(self, account_url: str, AZURE_STORAGE_CONTAINER_NAME: str, blob_name: str):
-#     # Create a BlobClient object with data transfer options for upload
-#     blob_client = BlobClient(
-#         account_url=account_url, 
-#         container_name=AZURE_STORAGE_CONTAINER_NAME, 
-#         blob_name=blob_name,
-#         credential=DefaultAzureCredential(),
-#         max_block_size=1024*1024*4, # 4 MiB
-#         max_single_put_size=1024*1024*8 # 8 MiB
-#     )
-    
-#     with open(file=os.path.join(r'file_path', blob_name), mode="rb") as data:
-#         blob_client = blob_client.upload_blob(data=data, overwrite=True, max_concurrency=2)
-
-# # アップロード時に BLOB のアクセス層を設定する
-# def upload_blob_access_tier(self, blob_service_client: BlobServiceClient, AZURE_STORAGE_CONTAINER_NAME: str, blob_name: str):
-#     blob_client = blob_service_client.get_blob_client(container=AZURE_STORAGE_CONTAINER_NAME, blob=blob_name)
-    
-#     #Upload blob to the cool tier
-#     with open(file=os.path.join(r'file_path', blob_name), mode="rb") as data:
-#         blob_client = blob_client.upload_blob(data=data, overwrite=True, standard_blob_tier=StandardBlobTier.COOL)
-
-# # ブロックのステージングとコミットによってブロック BLOB をアップロードする
-# def upload_blocks(self, blob_container_client: ContainerClient, local_file_path: str, block_size: int):
-#     file_name = os.path.basename(local_file_path)
-#     blob_client = blob_container_client.get_blob_client(file_name)
-
-#     with open(file=local_file_path, mode="rb") as file_stream:
-#         block_id_list = []
-
-#         while True:
-#             buffer = file_stream.read(block_size)
-#             if not buffer:
-#                 break
-
-#             block_id = uuid.uuid4().hex
-#             block_id_list.append(BlobBlock(block_id=block_id))
-
-#             blob_client.stage_block(block_id=block_id, data=buffer, length=len(buffer))
-
-#         blob_client.commit_block_list(block_id_list)
-
-# # BLOB を非同期にアップロードする
-# async def main():
-#     sample = BlobSamples()
-
-#     # TODO: Replace <storage-account-name> with your actual storage account name
-#     account_url = "https://<storage-account-name>.blob.core.windows.net"
-#     credential = DefaultAzureCredential()
-
-#     async with BlobServiceClient(account_url, credential=credential) as blob_service_client:
-#         await sample.upload_blob_file(blob_service_client, "sample-container")
-
-# if __name__ == '__main__':
-#     asyncio.run(main())
-
-# async def upload_blob_file(self, blob_service_client: BlobServiceClient, container_name: str):
-#     container_client = blob_service_client.get_container_client(container=AZURE_STORAGE_CONTAINER_NAME)
-#     with open(file=os.path.join('filepath', 'filename'), mode="rb") as data:
-#         blob_client = await container_client.upload_blob(name="sample-blob.txt", data=data, overwrite=True)
-
-
-# # Blob Storage へのアクセスを承認して接続する
-# def get_blob_service_client(self, AZURE_STORAGE_ACCOUNT):
-#     account_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net"
-#     credential = DefaultAzureCredential()
-
-#     # BlobServiceClient オブジェクトを作成する
-#     blob_service_client = BlobServiceClient(account_url, credential=credential)
-
-#     return blob_service_client
-
-# # 非同期 Blob Storage へのアクセスを承認して接続する
-# async def get_blob_service_client_sas(self, sas_token: str):
-#     account_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net"
-#     # SAS トークン文字列は、ここで認証情報に割り当てることも、アカウント URL に追加することもできます
-#     credential = sas_token
-
-#     # BlobServiceClient オブジェクトを作成する
-#     # blob_service_client = BlobServiceClient(account_url, credential=credential)
-
-#     async with BlobServiceClient(account_url, credential=credential) as blob_service_client:
-#         container_client = blob_service_client.get_container_client(container="sample-container")
-
-#     return blob_service_client
-
-
-
+# Azure Blob Storageのメタデータは、ASCII文字のみをサポートしているため、日本語などの非ASCII文字は使用するできません。
+# 日本語をBase64エンコードする
+def encode_metadata_value(value):
+    return base64.b64encode(value.encode('utf-8')).decode('ascii')
