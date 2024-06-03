@@ -26,9 +26,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Check for requirements.txt and package.json
-        run: ls -la
-
       - name: npm install, build, and test
         run: |
           cd src/frontend
