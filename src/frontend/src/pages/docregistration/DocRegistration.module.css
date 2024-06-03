@@ -1,0 +1,57 @@
+.container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+}
+
+.containerTable {
+    margin: 10px 10px;
+    background-color: #E9F3FF;
+    border-radius: 15px;
+    box-shadow: 1px 1px 1px #000;
+    margin: 10px;
+    height: 100%;
+}
+
+.commandsContainer {
+    height: 20vh;
+    margin: 0 20px;
+}
+ .titleAndSelectArea {
+    display: flex;
+    justify-content: space-between;
+}
+.botChoiceArea {
+    display: flex;
+    width: 25%;
+    justify-content: space-between;
+    align-items: center;
+}
+.botSelectBox {
+    height: 50%;
+    width: 70%;
+}
+.registrationDeletionArea {
+    text-align: right;
+}
+
+.docRegistrationButtonArea {
+    width: 150px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.border {
+    border-width: 1px 0 0 0;
+    border-style: solid;
+    margin: 0 10px;
+}
+
+.displayRegisteredDataArea {
+    height: 56vh;
+    margin: 10px;
+    background-color: #fff;
+    border-radius: 15px;
+    overflow-y: scroll;
+}
