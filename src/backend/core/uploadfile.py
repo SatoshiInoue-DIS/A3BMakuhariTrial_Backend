@@ -36,11 +36,8 @@ SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
 AZURE_STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
-AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME")
 
 AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
-AZURE_SEARCH_INDEX = os.environ.get("AZURE_SEARCH_INDEX")
-AZURE_SEARCH_INDEXER = os.environ.get("AZURE_SEARCH_INDEXER")
 AZURE_SEARCH_SERVICE_KEY = os.environ.get("AZURE_SEARCH_SERVICE_KEY")
 AZURE_FORMRECOGNIZER_SERVICE = os.environ.get("AZURE_FORMRECOGNIZER_SERVICE")
 AZURE_FORM_RECOGNIZER_KEY=os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
@@ -54,11 +51,7 @@ AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
 
 
 azure_credential = DefaultAzureCredential()
-search_client = SearchClient(
-    endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
-    index_name=AZURE_SEARCH_INDEX,
-    credential=AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
-)
+
 
 # BlobServiceClientの作成
 blob_service = BlobServiceClient(
@@ -103,10 +96,10 @@ def generate_embeddings(text):
     return embeddings
 
 # インデックスを作成するメソッド
-def create_search_index():
-    if AZURE_SEARCH_INDEX not in index_client.list_index_names():
+def create_search_index(search_index):
+    if search_index not in index_client.list_index_names():
         index = SearchIndex(
-            name=AZURE_SEARCH_INDEX,
+            name=search_index,
             fields=[
                 SimpleField(name="id", type="Edm.String", key=True, sortable=True, filterable=True, facetable=True),
                 SearchableField(name="content", type="SearchFieldDataType.String", analyzer_name="ja.microsoft"),
@@ -118,7 +111,7 @@ def create_search_index():
                 SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
                 searchable=True, vector_search_dimensions=1536, vector_search_profile_name="default")
             ],
-            semantic_settings=SemanticSearch(
+            semantic_search=SemanticSearch(
                 configurations=[SemanticConfiguration(
                     name='default',
                     prioritized_fields=SemanticPrioritizedFields(
@@ -144,14 +137,14 @@ def create_search_index():
             )
         )
         index_client.create_index(index)
-        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）の作成しました。")
+        print(f"検索インデックス（'{search_index}'）の作成しました。")
     else:
-        print(f"検索インデックス（'{AZURE_SEARCH_INDEX}'）はすでに存在します。")
+        print(f"検索インデックス（'{search_index}'）はすでに存在します。")
 
 # インデクサーを実行する
-def run_indexer():
-    result = indexers_client.run_indexer(AZURE_SEARCH_INDEXER)
-    return result
+# def run_indexer():
+#     result = indexers_client.run_indexer(AZURE_SEARCH_INDEXER)
+#     return result
 
 # 各ファイルにページ番号の取り付けsourcepage
 def add_page_blob_name(filename, page = 0):
@@ -164,18 +157,12 @@ def add_page_blob_name(filename, page = 0):
 def blob_name_from_file_page(filename, page = 0):
     if os.path.splitext(filename)[1].lower() == ".pdf":
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
-    elif os.path.splitext(filename)[1].lower() in (".xls", ".xlsx"):
-        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".xlsx"
     elif os.path.splitext(filename)[1].lower() == ".txt":
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".txt"
     elif os.path.splitext(filename)[1].lower() == ".png":
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".png"
     elif os.path.splitext(filename)[1].lower() in (".jpg", ".jpeg"):
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".jpg"
-    elif os.path.splitext(filename)[1].lower() in (".doc", ".docx"):
-        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
-    elif os.path.splitext(filename)[1].lower() in (".ppt", ".pptx"):
-        return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pptx"
     else:
         return os.path.basename(filename)
 
@@ -217,7 +204,7 @@ def get_page_map(results, offset):
     return page_map
 
 #  直接blobのURLを見に行きPDFからテキストを抽出します。Document intelligenceサービスを使用します。
-def get_document_text(filename, index, extension):
+def get_document_text(filename, container_name, extension):
     """
     PDF →   PDF,
     TEXT    →   TXT,
@@ -231,7 +218,7 @@ def get_document_text(filename, index, extension):
     offset = 0
     page_map = []
     # BLOLに保存されたファイルのURL
-    blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{index}/{filename}"
+    blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{container_name}/{filename}"
     # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
     form_recognizer_client = DocumentAnalysisClient(
         endpoint=f"https://{AZURE_FORMRECOGNIZER_SERVICE}.cognitiveservices.azure.com/",
@@ -256,7 +243,7 @@ def get_document_text(filename, index, extension):
     # テキストの場合はDocument intelligenceを使わない
     elif extension == ".txt":
         print(f"'{filename}' のテキストを読み取ります")
-        blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+        blob_container = blob_service.get_container_client(container_name)
         blob_client = blob_container.get_blob_client(filename)
         download_stream = blob_client.download_blob(encoding='UTF-8')
         page_text = download_stream.readall()
@@ -373,8 +360,13 @@ def split_text(page_map):
         yield (all_text[start:end], find_page(start))
 
 # セクションを検索インデックスにインデックスします。
-def index_sections(filename, sections):
-    print(f"ファイル名「'{filename}'」のセクションを検索インデックス「'{AZURE_SEARCH_INDEX}'」にインデックスする")
+def index_sections(filename, sections, search_index):
+    search_client = SearchClient(
+        endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
+        index_name=search_index,
+        credential=AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
+    )
+    print(f"ファイル名「'{filename}'」のセクションを検索インデックス「'{search_index}'」にインデックスする")
     i = 0
     batch = []
     for s in sections:
@@ -391,7 +383,7 @@ def index_sections(filename, sections):
         print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功")  
 
 
-def pdf_uploader(blob_container, upload_file, filename, extension):
+def pdf_uploader(blob_container, upload_file, filename, original_filename, extension):
     organized_allpages = []
     reader = PdfReader(upload_file)
     pages = reader.pages
@@ -404,25 +396,27 @@ def pdf_uploader(blob_container, upload_file, filename, extension):
         writer.write(f)
         f.seek(0)
         # メタデータを設定
-        metadata = makeMetaData(filename, extension)
+        metadata = makeMetaData(original_filename, extension)
         blob_container.upload_blob(blob_name, f, overwrite=True, metadata=metadata)
         organized_allpages.append(blob_name)
     return organized_allpages
 
 # 指定されたファイルをAzure Blob Storageにアップロードします。PDFの場合、各ページを個別のBlobとしてアップロードします。
-def upload_blobs(upload_file, extension):
-    blob_container = blob_service.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+def upload_blobs(upload_file, extension, container_name):
+    blob_container = blob_service.get_container_client(container_name)
     # コンテナーがなければ作成
     if not blob_container.exists():
         blob_container.create_container()
-        print(f"{AZURE_STORAGE_CONTAINER_NAME}コンテナーを作成しました")
+        print(f"{container_name}コンテナーを作成しました")
     # ファイル名
-    filename = upload_file.filename
+    original_filename = upload_file.filename
     # 整理された全ページを入れる
     organized_allpages = []
     # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
     if extension == ".pdf":
-        organized_allpages = pdf_uploader(blob_container, upload_file, filename, extension)
+        # 新しいPDFファイル名を生成（[PDFファイル名].pdf）
+        pdf_file_name = original_filename + ".pdf"
+        organized_allpages = pdf_uploader(blob_container, upload_file, pdf_file_name, original_filename, extension)
     # ファイルがエクセルの場合、各シートごとにPDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".xls", ".xlsx"):
         # COMオブジェクトの初期化
@@ -446,7 +440,7 @@ def upload_blobs(upload_file, extension):
             # 各シートをPDFに変換する
             for sheet in wb.Sheets:
                 # 新しいPDFファイル名を生成（[エクセルファイル名]－[シート名].pdf）
-                pdf_file_name = os.path.splitext(os.path.basename(filename))[0] + f"-{sheet.name}" + ".pdf"
+                pdf_file_name = original_filename + f"-{sheet.name}" + ".pdf"
                 # PDF変換して保存する場所
                 tmp_pdf_file_path = tmp_pdf_file_dir + "/" + pdf_file_name
                 # シートをPDFに変換する
@@ -454,7 +448,7 @@ def upload_blobs(upload_file, extension):
                 print(f"Excelファイルのシート {sheet.name} を PDF に変換しました。")
                 # 生成されたPDFの内容を読み込む
                 with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                    organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, extension)
+                    organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
                 # PDFの一時ファイルを削除する
                 os.remove(tmp_pdf_file_path)
         finally:
@@ -484,12 +478,14 @@ def upload_blobs(upload_file, extension):
                 tmp_pdf_file_path = tmp_pdf_file.name
             # WordファイルをPDFに変換
             convert(tmp_word_file_path, tmp_pdf_file_path)
-            print(f"Wordファイル {filename} をPDFに変換しました")
+            print(f"Wordファイル {original_filename} をPDFに変換しました")
             # Wordの一時ファイルを削除する
             os.remove(tmp_word_file_path)
+             # 新しいPDFファイル名を生成（[Wordファイル名].pdf）
+            pdf_file_name = original_filename + ".pdf"
             # 生成されたPDFの内容を読み込む
             with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                organized_allpages = pdf_uploader(blob_container, pdf_file, filename, extension)
+                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
         finally:
             # PDFの一時ファイルを削除する
             os.remove(tmp_pdf_file_path)
@@ -513,8 +509,8 @@ def upload_blobs(upload_file, extension):
                 tmp_powerpoint_file.write(powerpoint_data)
                 tmp_powerpoint_file_path = tmp_powerpoint_file.name
             tmp_pdf_file_dir = os.path.dirname(tmp_powerpoint_file_path)
-            # 新しいPDFファイル名を生成
-            pdf_file_name = os.path.splitext(os.path.basename(filename))[0] + ".pdf"
+            # 新しいPDFファイル名を生成（[PowerPointファイル名].pdf）
+            pdf_file_name = original_filename + ".pdf"
             # PDF変換して保存する場所
             tmp_pdf_file_path = tmp_pdf_file_dir + "/" + pdf_file_name
             # Powerpointファイルを開きPDF形式で保存
@@ -531,10 +527,10 @@ def upload_blobs(upload_file, extension):
                 OutputType=constants.ppPrintOutputNotesPages,  #出力形式.ノート付きのスライド
                 RangeType=constants.ppPrintAll,  #印刷するスライドの範囲.すべてのスライド
             )
-            print(f"PowerPointファイル {filename} をPDFに変換しました")
+            print(f"PowerPointファイル {original_filename} をPDFに変換しました")
             # 生成されたPDFの内容を読み込む
             with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, extension)
+                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
             # PDFの一時ファイルを削除する
             os.remove(tmp_pdf_file_path)
         finally:
@@ -548,46 +544,32 @@ def upload_blobs(upload_file, extension):
             pythoncom.CoUninitialize()
     # ファイルがテキスト・画像(.txt,.png,.jpg,.jpeg)の場合、そのままBLOBにアップロードします。
     else :
-        page = 0
-        blob_name = blob_name_from_file_page(filename)
+        blob_name = blob_name_from_file_page(original_filename)
         # メタデータを設定
-        metadata = makeMetaData(filename, extension)
+        metadata = makeMetaData(original_filename, extension)
         blob_container.upload_blob(blob_name, upload_file, overwrite=True, metadata=metadata)
         # blob_container.upload_blob(blob_name, upload_file, overwrite=True)
         organized_allpages.append(blob_name)
-    print(f"\t Azure Blob Starageへ {filename} の書き込みが終わりました。")
+    print(f"\t Azure Blob Starageへ {original_filename} の書き込みが終わりました。")
     return organized_allpages
 
 # メタデータの作成
 def makeMetaData(sheet_name: str, extension: str) -> dict[str, str]:
-    if extension == ".pdf":
-        original_file_format = "PDF"
-        after_conversion_file_format = "PDF"
-        analysis_model = "prebuilt-layout"
-    elif extension in (".xls", ".xlsx"):
-        original_file_format = "EXCEL"
-        after_conversion_file_format = "PDF"
-        analysis_model = "prebuilt-layout"
-    elif extension == ".txt":
-        original_file_format = "TEXT"
-        after_conversion_file_format = "TEXT"
-        analysis_model = "readall"
-    elif extension == ".png":
-        original_file_format = "PNG"
-        after_conversion_file_format = "PNG"
-        analysis_model = "prebuilt-layout"
-    elif extension in (".jpeg", ".jpg"):
-        original_file_format = "JPG"
-        after_conversion_file_format = "JPG"
-        analysis_model = "prebuilt-layout"
-    elif extension in (".doc", ".docx"):
-        original_file_format = "WORD"
-        after_conversion_file_format = "PDF"
-        analysis_model = "prebuilt-read"
-    elif extension in (".ppt", ".pptx"):
-        original_file_format = "POWERPOINT"
-        after_conversion_file_format = "PDF"
-        analysis_model = "prebuilt-read"
+    format_mappings = {
+        ".pdf": ("PDF", "PDF", "prebuilt-layout"),
+        ".xls": ("EXCEL", "PDF", "prebuilt-layout"),
+        ".xlsx": ("EXCEL", "PDF", "prebuilt-layout"),
+        ".txt": ("TEXT", "TEXT", "readall"),
+        ".png": ("PNG", "PNG", "prebuilt-layout"),
+        ".jpeg": ("JPG", "JPG", "prebuilt-layout"),
+        ".jpg": ("JPG", "JPG", "prebuilt-layout"),
+        ".doc": ("WORD", "PDF", "prebuilt-read"),
+        ".docx": ("WORD", "PDF", "prebuilt-read"),
+        ".ppt": ("POWERPOINT", "PDF", "prebuilt-read"),
+        ".pptx": ("POWERPOINT", "PDF", "prebuilt-read")
+    }
+    original_file_format, after_conversion_file_format, analysis_model = format_mappings.get(extension, ("UNKNOWN", "UNKNOWN", "unknown-model"))
+
     encode_sheet_name = encode_metadata_value(sheet_name)
     return {
         # 取り込み時のファイル名

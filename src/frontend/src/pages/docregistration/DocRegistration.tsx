@@ -43,38 +43,41 @@ const summarizeData = (data: []): any => {
     const pattern = /^(.*?)-\d+(\..+)$/;
 
     data.forEach(file => {
-        const fileNameParts = (file[0] as string).match(pattern); // ファイル名を「-」と「拡張子」で分割する
-        if (fileNameParts) {
-            const baseFileName = fileNameParts[1];// 拡張子の前の部分を取得「012_IT基礎研修_データベース基礎_演習問題」
-            const extensionName = fileNameParts[2];//拡張子を取得「.pdf」
-        
+        // const fileNameParts = (file[0] as string).match(pattern); // ファイル名を「-」と「拡張子」で分割する
+        // if (fileNameParts) {
+            // const baseFileName = fileNameParts[1];// 拡張子の前の部分を取得「012_IT基礎研修_データベース基礎_演習問題」
+            // const extensionName = fileNameParts[2];//拡張子を取得「.pdf」
+            const originalFileName = file[6]//メタデータから取得したオリジナルのファイル名
             // const baseFileName = fileNameParts[1] // 拡張子の前の部分を取得
             const size = file[3] as number;
             const modifiedDate = file[2] as string;
-            const doDelete = file[3] as boolean;
-            const deleteDate = file[4] as string
+            const doDelete = file[4] as boolean;
+            const deleteDate = file[5] as string
         
             // グループ化されたファイル名がすでに存在するかどうかを確認し、更に拡張子も存在しない場合は新しいオブジェクトを作成します
-            if (!groupedFiles[baseFileName]) {
-                if(!groupedFiles[extensionName]) {
-                    if(doDelete) {
-                        groupedFiles[baseFileName] = { fileName: baseFileName + extensionName, size: 0, modifiedDate: "", delete:doDelete, deleteDate:"" };
-                    } else {
-                        groupedFiles[baseFileName] = { fileName: baseFileName + extensionName, size: 0, modifiedDate: "", delete:doDelete, deleteDate:"" };
-                    }
-                }
+            // if (!groupedFiles[baseFileName]) {
+            //     if(!groupedFiles[extensionName]) {
+            //         if(doDelete) {
+            //             groupedFiles[baseFileName] = { fileName: baseFileName + extensionName, size: 0, modifiedDate: "", delete:doDelete, deleteDate:"" };
+            //         } else {
+            //             groupedFiles[baseFileName] = { fileName: baseFileName + extensionName, size: 0, modifiedDate: "", delete:doDelete, deleteDate:"" };
+            //         }
+            //     }
+            // }
+            if (!groupedFiles[originalFileName]) {
+                groupedFiles[originalFileName] = { fileName: originalFileName, size: 0, modifiedDate: "", delete:doDelete, deleteDate:"" };
             }
             // 各ファイルのサイズを合計します
-            groupedFiles[baseFileName].size += size;
+            groupedFiles[originalFileName].size += size;
             // 各ファイルの最新の日時を更新します
-            if (modifiedDate > groupedFiles[baseFileName].modifiedDate) {
-                groupedFiles[baseFileName].modifiedDate = modifiedDate;
+            if (modifiedDate > groupedFiles[originalFileName].modifiedDate) {
+                groupedFiles[originalFileName].modifiedDate = modifiedDate;
             }
             // 各ファイルの最新の日時を更新します
-            if (deleteDate > groupedFiles[baseFileName].deleteDate) {
-                groupedFiles[baseFileName].deleteDate = deleteDate;
+            if (deleteDate > groupedFiles[originalFileName].deleteDate) {
+                groupedFiles[originalFileName].deleteDate = deleteDate;
             }
-        }
+        // }
     });
     // グループ化されたファイルの配列を作成します
     const resultList= Object.values(groupedFiles).map(groupedFile => {
