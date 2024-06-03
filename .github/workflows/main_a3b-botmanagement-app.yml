@@ -21,6 +21,9 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: '3.11'
+      
+      - name: Check for requirements.txt
+        run: ls -la
 
       - name: Create and start virtual environment
         run: |
