@@ -32,16 +32,16 @@ jobs:
 
       - name: Install Node.js dependencies
         run: |
-          cd path/to/frontend/directory # package.jsonが存在するディレクトリに移動
+          cd src/frontend
           npm install
 
       - name: Create and start virtual environment
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          cd src/backend
+          .\Scripts\activate
       
       - name: Install dependencies
-        run: pip install -r path/to/backend/directory/requirements.txt # 正しいパスを指定してください
+        run: pip install -r requirements.txt
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
 
