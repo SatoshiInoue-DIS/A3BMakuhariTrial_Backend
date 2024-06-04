@@ -1,11 +1,7 @@
-// import React, { useEffect, useState } from "react";
-// import { useTable, useSortBy } from "react-table";
-
-import { SevedFileResponse, savedfileApi, deleteApi } from "../../api";
+import { SevedFileResponse, deleteApi } from "../../api";
 
 import React, { forwardRef, useRef, useEffect } from 'react';
 import { useTable, Column, useSortBy, useRowSelect } from 'react-table';
-import { Data } from '../Data';
 
 type Props = {
     tableColumns: any;
@@ -54,6 +50,8 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
         </>
     );
 });
+
+IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
 const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResponse>[]; data: SevedFileResponse[]; callback: (selected: SevedFileResponse[]) => void; bot:string; }) => {
     const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SevedFileResponse>(
@@ -152,96 +150,10 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
                     })}
                 </tbody>
             </table>
-
-
-
-            {/* <p>Selected Rows: {Object.keys(selectedRowIds).length}</p>
-            <pre>
-                <code>
-                    {JSON.stringify(
-                        {
-                            selectedRowIds: selectedRowIds,
-                            'selectedFlatRows[].original': selectedFlatRows.map(
-                                (d) => d.original
-                            ),
-                        },
-                        null,
-                        2
-                    )}
-                </code>
-            </pre> */}
-
-
-
         </>
     );
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//     // const [checkedValues, setCheckedValues] = useState<string[]>([]);
-
-//     // const checkChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     //     if (checkedValues.includes(e.target.value)) {
-//     //         setCheckedValues(
-//     //             checkedValues.filter((checkedValue) => checkedValue !== e.target.value)
-//     //         );
-//     //     } else {
-//     //         setCheckedValues([...checkedValues, e.target.value]);
-//     //     }
-//     // };
-// const Table: React.FC<Props> = ({ tableColumns, files }) => {
-//     const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } = useTable({ columns:tableColumns, data: files }, useSortBy);
-
-//     return (
-//         <table {...getTableProps()}>
-//             <thead>
-//                 {headerGroups.map((headerGroup) => (
-//                     <tr {...headerGroup.getHeaderGroupProps()}>
-//                         {headerGroup.headers.map((column) => (
-//                             <th {...column.getHeaderProps(column.getSortByToggleProps())}>{column.render("Header")}
-//                                 {column.canSort &&
-//                                     (() => {
-//                                         return (
-//                                             <span>
-//                                                 {column.isSorted ? column.isSortedDesc ? "🔽" : "🔼" : "" }
-//                                             </span>
-//                                         );
-//                                     })
-//                                 ()}
-//                             </th>
-//                         ))}
-//                     </tr>
-//                 ))}
-//             </thead>
-//             <tbody {...getTableBodyProps()}>
-//                 {rows.map((row) => {
-//                     prepareRow(row);
-//                     return (
-//                         <tr {...row.getRowProps()}>
-//                             {row.cells.map((cell) => (
-//                                 <td {...cell.getCellProps()}>
-//                                     {cell.render("Cell")}
-//                                 </td>
-//                             ))}
-//                         </tr>
-//                     );
-//                 })}
-//             </tbody>
-//         </table>
-//     );
-// };
+Table.displayName = 'Table';
 
 export default Table;

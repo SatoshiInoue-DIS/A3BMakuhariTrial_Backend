@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install 7zip
+        run: choco install 7zip
+
       - name: npm install, build, and test
         run: |
           cd src/frontend
@@ -46,13 +49,14 @@ jobs:
       - name: Zip artifact for deployment
         run: |
           cd src/backend
-          7z a ../release.zip ./* -x!venv/*
+          7z a ../release.zip ./*
       
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v3
         with:
           name: node-app
-          path: release.zip
+          path: src/release.zip
+          if-no-files-found: warn
 
   deploy:
     runs-on: ubuntu-latest
@@ -86,4 +90,4 @@ jobs:
         with:
           app-name: 'a3b-bot-management-app'
           slot-name: 'Production'
-          
+          package: .
