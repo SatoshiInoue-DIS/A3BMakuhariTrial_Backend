@@ -3,9 +3,12 @@ import {
     SevedFileRequest, SevedFileResponse, DeleteResponse
 } from "./models";
 
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL
+
 //Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
 export async function deleteApi(options: {filename: string}[], bot:string): Promise<DeleteResponse> {
-    const response = await fetch("http://localhost:5000/delete", {
+    const response = await fetch(`${apiUrl}/delete`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -25,7 +28,7 @@ export async function deleteApi(options: {filename: string}[], bot:string): Prom
 // ドキュメントをAzure Blob Storageに登録及びAzure AI Searchの検索インデックスに登録
 export async function uploadApi(options: FormData): Promise<UploadResponse> {
     console.log(options)
-    const response = await fetch("http://localhost:5000/upload", {
+    const response = await fetch(`${apiUrl}/upload`, {
         // multipart/form-dataを指定するとboundaryが消えるためformデータがうまく送信されないため、固定で指定する
         // ※node-fetch側でうまくContent-Typeは設定してくれるっぽい
         // https://qiita.com/akameco/items/dc61497ad16200c67b44
@@ -43,7 +46,7 @@ export async function uploadApi(options: FormData): Promise<UploadResponse> {
 
 // Azure Blob Storageに登録してあるドキュメント情報を取得する
 export async function savedfileApi(options: SevedFileRequest): Promise<[]> {
-    const response = await fetch("http://localhost:5000/savedfile", {
+    const response = await fetch(`${apiUrl}/savedfile`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
