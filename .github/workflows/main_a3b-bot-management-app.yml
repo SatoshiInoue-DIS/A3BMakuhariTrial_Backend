@@ -26,7 +26,7 @@ jobs:
 
       - name: Zip artifact for deployment
         run: |
-          7z a release.zip ./src/*
+          7z a release.zip ./src/frontend/*
       
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v3
