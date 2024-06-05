@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy ASP.Net Core app to Azure Web App - a3b-bot-management-app-backend
+name: Build and deploy Python app to Azure Web App - a3b-bot-management-app-backend
 
 on:
   push:
@@ -16,23 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up .NET Core
-        uses: actions/setup-dotnet@v1
+      - name: Set up Python
+        uses: actions/setup-python@v2
         with:
-          dotnet-version: '8.x'
-          include-prerelease: true
+          python-version: '3.x'
 
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
-
-      - name: dotnet publish
-        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
+          name: python-app
+          path: .
 
   deploy:
     runs-on: windows-latest
@@ -47,7 +43,7 @@ jobs:
       - name: Download artifact from build job
         uses: actions/download-artifact@v3
         with:
-          name: .net-app
+          name: python-app
       
       - name: Login to Azure
         uses: azure/login@v1
