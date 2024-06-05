@@ -30,7 +30,8 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: python-app
-          path: .src/backend
+          path: src/backend
+          if-no-files-found: warn
 
   deploy:
     runs-on: windows-latest
