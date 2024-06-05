@@ -22,7 +22,9 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          cd src/backend
+          pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v2
