@@ -72,8 +72,7 @@ jobs:
         with:
           app-name: 'a3b-bot-management-app'
           slot-name: 'Production'
-          package: ./nextjs-app
-
+          package: ./out
       # - name: 'Unzip release.zip in Azure Web App'
       #   run: |
       #     curl -X POST \
