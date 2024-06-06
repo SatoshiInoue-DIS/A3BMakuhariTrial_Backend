@@ -26,11 +26,10 @@ jobs:
           cd src/frontend
           npm ci
 
-      - name: Build and export the app
+      - name: Build the app
         run: |
           cd src/frontend
           npm run build
-          npm run export
 
       # - name: Install 7zip
       #   run: choco install 7zip
