@@ -13,7 +13,12 @@ const nextConfig = {
     });
     return config;
   },
+  // 静的サイトとしてエクスポートする設定を追加
   output: 'export',
+  // Image Optimization APIを無効にする設定を追加
+  images: {
+    unoptimized: true,
+  },
   // images: {
   //   disableStaticImages: true, // importした画像の型定義設定を無効にする
   // },
