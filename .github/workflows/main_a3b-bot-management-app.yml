@@ -21,18 +21,29 @@ jobs:
         with:
           node-version: '20.x'
       
-      - name: Install 7zip
-        run: choco install 7zip
-
-      - name: Zip artifact for deployment
+      - name: Install dependencies
         run: |
-          7z a release.zip ./src/frontend/*
+          cd src/frontend
+          npm ci
+
+      - name: Build and export the app
+        run: |
+          cd src/frontend
+          npm run build
+          npm run export
+
+      # - name: Install 7zip
+      #   run: choco install 7zip
+
+      # - name: Zip artifact for deployment
+      #   run: |
+      #     7z a release.zip ./src/frontend/*
       
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v3
         with:
           name: nextjs-app
-          path: release.zip
+          path: src/frontend/out
           if-no-files-found: warn
 
   deploy:
@@ -62,17 +73,17 @@ jobs:
         with:
           app-name: 'a3b-bot-management-app'
           slot-name: 'Production'
-          package: release.zip # Update this line to point to the zip file
+          package: ./nextjs-app
 
-      - name: 'Unzip release.zip in Azure Web App'
-        run: |
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.AZUREAPPSERVICE_CLIENTSECRET }}" \
-            -d '{"command": "unzip release.zip -d /home/site/wwwroot"}' \
-            https://a3b-bot-management-app.scm.azurewebsites.net/api/command
-        shell: bash
+      # - name: 'Unzip release.zip in Azure Web App'
+      #   run: |
+      #     curl -X POST \
+      #       -H "Content-Type: application/json" \
+      #       -H "Authorization: Bearer ${{ secrets.AZUREAPPSERVICE_CLIENTSECRET }}" \
+      #       -d '{"command": "unzip release.zip -d /home/site/wwwroot"}' \
+      #       https://a3b-bot-management-app.scm.azurewebsites.net/api/command
+      #   shell: bash
 
-      - name: Clean up ZIP file
-        run: rm release.zip
-        shell: bash
+      # - name: Clean up ZIP file
+      #   run: rm release.zip
+      #   shell: bash
