@@ -54,6 +54,7 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_BACKEND }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_BACKEND }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BACKEND }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET_BACKEND }} 
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
