@@ -63,5 +63,5 @@ jobs:
         with:
           app-name: 'a3b-bot-management-app-backend'
           slot-name: 'Production'
-          package: .
+          package: src/backend
           
