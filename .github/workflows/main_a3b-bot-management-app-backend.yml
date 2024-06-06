@@ -24,7 +24,6 @@ jobs:
       - name: Install dependencies
         run: |
           cd src/backend
-          .\Script\activate
           pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
@@ -53,11 +52,7 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS_BACKEND}}
-          # client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_BACKEND }}
-          # tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_BACKEND }}
-          # subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BACKEND }}
-          # client-secret: ${{ secrets.AZURE_CLIENT_SECRET_BACKEND }} 
-
+          
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
