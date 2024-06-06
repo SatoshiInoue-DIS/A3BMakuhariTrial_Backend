@@ -24,6 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd src/backend
+          .\Script\activate
           pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
@@ -63,5 +64,5 @@ jobs:
         with:
           app-name: 'a3b-bot-management-app-backend'
           slot-name: 'Production'
-          package: src/backend
+          package: .
           
