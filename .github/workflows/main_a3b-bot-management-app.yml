@@ -53,13 +53,27 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DD33679D7BD249FD9A14C2F543C0A778 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_0880757B573D424DB901BFE981637665 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_D7AD63AA27724CAD927B6FCEE2644436 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
+          client-secret: ${{ secrets.AZUREAPPSERVICE_CLIENTSECRET }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v2
         with:
           app-name: 'a3b-bot-management-app'
           slot-name: 'Production'
-          package: .
+          package: release.zip # Update this line to point to the zip file
+
+      - name: 'Unzip release.zip in Azure Web App'
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.AZUREAPPSERVICE_CLIENTSECRET }}" \
+            -d '{"command": "unzip release.zip -d /home/site/wwwroot"}' \
+            https://a3b-bot-management-app.scm.azurewebsites.net/api/command
+        shell: bash
+
+      - name: Clean up ZIP file
+        run: rm release.zip
+        shell: bash
