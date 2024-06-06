@@ -30,13 +30,6 @@ jobs:
         run: |
           cd src/frontend
           npm run build
-
-      # - name: Install 7zip
-      #   run: choco install 7zip
-
-      # - name: Zip artifact for deployment
-      #   run: |
-      #     7z a release.zip ./src/frontend/*
       
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v3
@@ -52,7 +45,7 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write #これはJWTをリクエストするために必要です
 
     steps:
       - name: Download artifact from build job
@@ -73,15 +66,4 @@ jobs:
           app-name: 'a3b-bot-management-app'
           slot-name: 'Production'
           package: .
-      # - name: 'Unzip release.zip in Azure Web App'
-      #   run: |
-      #     curl -X POST \
-      #       -H "Content-Type: application/json" \
-      #       -H "Authorization: Bearer ${{ secrets.AZUREAPPSERVICE_CLIENTSECRET }}" \
-      #       -d '{"command": "unzip release.zip -d /home/site/wwwroot"}' \
-      #       https://a3b-bot-management-app.scm.azurewebsites.net/api/command
-      #   shell: bash
 
-      # - name: Clean up ZIP file
-      #   run: rm release.zip
-      #   shell: bash

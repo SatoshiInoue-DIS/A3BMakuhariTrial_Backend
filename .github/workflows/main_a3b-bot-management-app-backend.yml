@@ -21,12 +21,23 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
+      - name: Create virtual environment
         run: |
           cd src/backend
           python -m venv venv
-          . venv/bin/activate
+          
+      - name: Activate virtual environment and install dependencies
+        run: |
+          cd src/backend
+          .\venv\Scripts\activate
           pip install -r requirements.txt
+
+      # - name: Install dependencies
+      #   run: |
+      #     cd src/backend
+      #     python -m venv venv
+      #     venv/bin/activate
+      #     pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v2
@@ -42,7 +53,7 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write #これはJWTをリクエストするために必要です
 
     steps:
       - name: Download artifact from build job
@@ -62,4 +73,3 @@ jobs:
           app-name: 'a3b-bot-management-app-backend'
           slot-name: 'Production'
           package: .
-          
