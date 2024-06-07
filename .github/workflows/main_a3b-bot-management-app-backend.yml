@@ -19,25 +19,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.11'
+          python-version: '3.X'
 
-      # - name: Create virtual environment
-      #   run: |
-      #     cd src/backend
-      #     python -m venv venv
-          
-      - name: Activate existing virtual environment and install dependencies
+      - name: Create virtual environment
         run: |
           cd src/backend
-          .\Scripts\activate
-          pip install -r requirements.txt
+          python -m venv venv
 
-      # - name: Install dependencies
-      #   run: |
-      #     cd src/backend
-      #     python -m venv venv
-      #     venv/bin/activate
-      #     pip install -r requirements.txt
+      - name: Activate virtual environment and install dependencies
+        run: |
+          cd src/backend
+          .venv\Scripts\activate
+          pip install -r requirements.txt
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v2
