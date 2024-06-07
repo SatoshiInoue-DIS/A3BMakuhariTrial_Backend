@@ -21,15 +21,15 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Create virtual environment
-        run: |
-          cd src/backend
-          python -m venv venv
+      # - name: Create virtual environment
+      #   run: |
+      #     cd src/backend
+      #     python -m venv venv
           
-      - name: Activate virtual environment and install dependencies
+      - name: Activate existing virtual environment and install dependencies
         run: |
           cd src/backend
-          .\venv\Scripts\activate
+          .\Scripts\activate
           pip install -r requirements.txt
 
       # - name: Install dependencies
