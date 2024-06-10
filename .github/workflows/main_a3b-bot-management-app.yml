@@ -46,6 +46,7 @@ jobs:
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
       id-token: write #これはJWTをリクエストするために必要です
+      contents: read
 
     steps:
       - name: Download artifact from build job
