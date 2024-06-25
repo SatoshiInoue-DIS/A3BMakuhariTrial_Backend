@@ -1,7 +1,7 @@
 import os
 import time
 import pypdf
-
+import sys
 import openai
 
 from dotenv import load_dotenv
@@ -22,6 +22,7 @@ load_dotenv()
 app = Flask(__name__)
 # 文字コードの設定をUTF-8(asciiじゃなくする)にする(Flaskは元々がascii)
 app.config["JSON_AS_ASCII"] = False
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # CORS設定を追加
 CORS(app)
 FlaskInstrumentor().instrument_app(app)
@@ -140,5 +141,6 @@ def ensure_openai_token():
         # openai.api_key = os.environ.get("AZURE_OPENAI_KEY")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('HTTP_PLATFORM_PORT', 5000))
+    app.run(debug=True, port=port)
 
