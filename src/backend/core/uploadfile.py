@@ -7,8 +7,11 @@ import hashlib
 import pythoncom
 import tempfile
 import win32com.client
+import subprocess
+
 from win32com.client import constants
 from docx2pdf import convert
+from PyODConverter import DocumentConverter
 
 from dotenv import load_dotenv
 from pypdf import PdfReader, PdfWriter
@@ -462,7 +465,7 @@ def upload_blobs(upload_file, extension, container_name):
             pythoncom.CoUninitialize()
     # ファイルがワードの場合、PDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".doc", ".docx"):
-        # COMオブジェクトの初期化
+        # # COMオブジェクトの初期化
         pythoncom.CoInitialize()
         # 入力ストリームを先頭にリセット
         upload_file.seek(0)
@@ -477,19 +480,22 @@ def upload_blobs(upload_file, extension, container_name):
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf_file:
                 tmp_pdf_file_path = tmp_pdf_file.name
             # WordファイルをPDFに変換
-            convert(tmp_word_file_path, tmp_pdf_file_path)
+            # convert(tmp_word_file_path, tmp_pdf_file_path)
+            convert_to_pdf(tmp_word_file_path, tmp_pdf_file_path)
+            # converter = DocumentConverter()
+            # converter.convert(tmp_word_file_path, tmp_pdf_file_path)
             print(f"Wordファイル {original_filename} をPDFに変換しました")
-            # Wordの一時ファイルを削除する
-            os.remove(tmp_word_file_path)
              # 新しいPDFファイル名を生成（[Wordファイル名].pdf）
             pdf_file_name = original_filename + ".pdf"
             # 生成されたPDFの内容を読み込む
             with open(tmp_pdf_file_path, 'rb') as pdf_file:
                 organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
         finally:
+            # Wordの一時ファイルを削除する
+            os.remove(tmp_word_file_path)
             # PDFの一時ファイルを削除する
             os.remove(tmp_pdf_file_path)
-            # COMオブジェクトの解放
+            # # COMオブジェクトの解放
             pythoncom.CoUninitialize()
     # ファイルがパワーポイントの場合、ノード付きPDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".ppt", ".pptx"):
@@ -553,6 +559,14 @@ def upload_blobs(upload_file, extension, container_name):
     print(f"\t Azure Blob Starageへ {original_filename} の書き込みが終わりました。")
     return organized_allpages
 
+def convert_to_pdf(input_file, output_file):
+    # command = f'unoconv -f pdf -o {output_file} {input_file}'
+    # command2 = ['unoconv', '-f', 'pdf', '-o', output_file, input_file]
+    # subprocess.run(command2, shell=False, check=True)
+    # subprocess.run(command, shell=False, check=True)
+    # subprocess.run(command)
+    # LibreOfficeのコマンドラインツールを呼び出してファイルをPDFに変換
+    result = subprocess.run(['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', output_file, input_file])
 # メタデータの作成
 def makeMetaData(sheet_name: str, extension: str) -> dict[str, str]:
     format_mappings = {

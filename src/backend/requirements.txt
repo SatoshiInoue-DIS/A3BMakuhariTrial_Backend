@@ -20,3 +20,6 @@ pdf2image==1.17.0
 pytz==2024.1
 docx2pdf==0.1.8
 pywin32==306
+unoconv==0.9.0
+python-docx
+pyodconverter
