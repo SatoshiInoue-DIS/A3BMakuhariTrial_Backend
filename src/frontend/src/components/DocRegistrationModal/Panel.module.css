@@ -10,6 +10,10 @@
     display: flex;
     justify-content: space-between;
 }
+
+.close_btn {
+    height: 30px;
+}
 .dropArea {
     border: 1px dashed #000;
     border-radius: 15px;

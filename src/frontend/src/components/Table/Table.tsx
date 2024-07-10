@@ -2,6 +2,9 @@ import { SevedFileResponse, deleteApi } from "../../api";
 
 import React, { forwardRef, useRef, useEffect } from 'react';
 import { useTable, Column, useSortBy, useRowSelect } from 'react-table';
+import Router, { useRouter } from 'next/router';
+import styles from './Table.module.css';
+import Image from "next/image"
 
 type Props = {
     tableColumns: any;
@@ -53,7 +56,10 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
 
 IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
-const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResponse>[]; data: SevedFileResponse[]; callback: (selected: SevedFileResponse[]) => void; bot:string; }) => {
+
+const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp }: { columns: Column<SevedFileResponse>[]; data: SevedFileResponse[]; callback: (selected: SevedFileResponse[]) => void; bot: string; setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>; isDeleting:boolean; deleteComp:boolean;}) => {
+    const router = useRouter()
+    
     const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SevedFileResponse>(
         { columns, data }, useSortBy, useRowSelect,
         (hooks) => {
@@ -87,27 +93,48 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
             ]);
         }
     );
-    
+
+
+
     const OneDelete = ({ filename }: { filename: { filename: string }[] }) => {
-        return <button onClick={() => makeApiRequest(filename, bot)}>削除</button>
+        return (
+            <button className={styles.one_del_btn} onClick={() => makeApiRequest(filename, bot, true, false)}>
+                <Image src="./garbage_can_icon.png" width={20} height={20} alt="garbage_can_icon"></Image>
+            </button>
+        )
     }
     
-    const makeApiRequest = async (filename: {filename: string}[], bot:string) => {
-        try {
-            const response = await deleteApi(filename, bot);
-            
-        } catch (e) {
-            alert(`削除処理中にエラーが発生しました: ${e}`);
-        } finally {
+    const makeApiRequest = async (filename: {filename: string}[], bot: string, isdel: boolean, delcom: boolean) => {
+        const executePermission = confirm("本当に削除しますか？")
+        if (executePermission) {
+            setIsDeleting(isdel)
+            setDeleteComp(delcom)
+            try {
+                const response = await deleteApi(filename, bot);
+                const findErrorFromResponse = response.some((res) => res.answer = false)
+                if (!findErrorFromResponse) {
+                    setIsDeleting(false)
+                    setDeleteComp(true)
+                }
+            } catch (e) {
+                alert(`削除処理中にエラーが発生しました: ${e}`);
+            } finally {
+            }
         }
     };
     
     useEffect(() => { callback(selectedFlatRows.map((d) => d.original)); }, [callback, selectedFlatRows]);
     
+    const comp = () => {
+        setIsDeleting(false)
+        setDeleteComp(false)
+        router.reload()
+    }
+
     return (
         <>
-            <table {...getTableProps()}>
-                <thead>
+            <table className={styles.doc_table} {...getTableProps()}>
+                <thead className={styles.doc_thead}>
                     {headerGroups.map((headerGroup) => {
                         const { key, ...restHeaderGroupProps } = headerGroup.getHeaderGroupProps();
                         return (
@@ -117,7 +144,7 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
                                         column.getSortByToggleProps()
                                     );
                                     return (
-                                        <th {...restColumn} key={key}>
+                                        <th className={styles.doc_cell_head} {...restColumn} key={key}>
                                             <>
                                                 {column.render('Header')}
                                                 <span>
@@ -131,24 +158,41 @@ const Table = ({ columns, data, callback, bot }: { columns: Column<SevedFileResp
                         );
                     })}
                 </thead>
-                <tbody {...getTableBodyProps()}>
-                    {rows.map((row) => {
-                        prepareRow(row);
-                        const { key, ...restRowProps } = row.getRowProps();
-                        return (
-                            <tr {...restRowProps} key={key}>
-                                {row.cells.map((cell) => {
-                                    const { key, ...restCellProps } = cell.getCellProps();
+                {!deleteComp ? (
+                    <>
+                        {isDeleting ? (
+                            <>
+                                <div>
+                                    <p>削除中です。</p>
+                                </div>
+                            </>
+                        ) : (
+                            <tbody className={styles.doc_tbody} {...getTableBodyProps()}>
+                                {rows.map((row) => {
+                                    prepareRow(row);
+                                    const { key, ...restRowProps } = row.getRowProps();
                                     return (
-                                        <td {...restCellProps} key={key}>
-                                            {cell.render('Cell')}
-                                        </td>
+                                        <tr {...restRowProps} key={key}>
+                                            {row.cells.map((cell) => {
+                                                const { key, ...restCellProps } = cell.getCellProps();
+                                                return (
+                                                    <td className={styles.doc_cell} {...restCellProps} key={key}>
+                                                        {cell.render('Cell')}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
                                     );
                                 })}
-                            </tr>
-                        );
-                    })}
-                </tbody>
+                            </tbody>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <p>削除が完了しました。</p>
+                        <button type="button" onClick={comp}>OK</button>
+                    </>
+                )}
             </table>
         </>
     );

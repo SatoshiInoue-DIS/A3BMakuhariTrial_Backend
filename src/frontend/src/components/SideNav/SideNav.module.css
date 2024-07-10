@@ -1,31 +1,47 @@
 .SideNav {
-    /* position: fixed; */
     background-color: #66AFB3;
-    width: 25vh;
+    min-width: 100px;
+    max-width: 250px;
+    width: 25%;
     text-align: center;
-    height: 80vh;
 }
 
 .SideNavList {
     list-style: none;
     padding-left: 0;
+    margin: 30px 0;
+    font-size: 15px;
 }
 
-.SideNavPageLinkActive {
-    color: #fff;
-    text-decoration: none;
-}
 
 .SideNavPageLink {
     color: #fff;
     text-decoration: none;
     opacity: 0.75;
-
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
     transition-duration: 500ms;
     transition-property: opacity;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    font-weight: 500;
+    margin-left: 15%;
 }
 
 .SideNavPageLink:hover {
     opacity: 1;
+}
+
+.SideNavPageLinkActive {
+    color: #fff;
+    text-decoration: none;
+    opacity: 1;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    transition-duration: 500ms;
+    transition-property: opacity;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    font-weight: 600;
+    margin-left: 15%;
 }

@@ -8,6 +8,7 @@ import File from "public/file.svg";
 import Trash from "public/trash.svg";
 import Image from "next/image";
 import { UploadRequest, uploadApi } from "../../api";
+import Router, { useRouter } from 'next/router'
 
 
 type Props = {
@@ -22,6 +23,7 @@ const Panel: NextPage<Props> = (props) => {
             props.close(e);
         }
     };
+    const router = useRouter()
 
     const [currentShowFiles, setCurrentShowFiles] = useState<{ file: File; isUploaded: boolean }[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -174,6 +176,10 @@ const Panel: NextPage<Props> = (props) => {
         }
     };
 
+    const comp = () => {
+        props.close
+        router.reload()
+    }
 
     return (
         <div className={Style.wrapper}>
@@ -191,7 +197,7 @@ const Panel: NextPage<Props> = (props) => {
                                 <header className={Style.modalPanelHeader}>
                                     <h3>ファイルのアップロード</h3>
                                     <p>{props.bot}</p>
-                                    <button type="button" onClick={props.close}>×</button>
+                                    <button className={Style.close_btn} type="button" onClick={props.close}>×</button>
                                 </header>
                                 <div
                                     {...getRootProps()}
@@ -279,7 +285,7 @@ const Panel: NextPage<Props> = (props) => {
             ) : (
                 <>
                     <p>登録が完了しました。</p>
-                    <button type="button" onClick={props.close}>OK</button>
+                    <button type="button" onClick={comp}>OK</button>
                 </>
             )}
         </div>

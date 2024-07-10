@@ -11,6 +11,7 @@
     background-color: rgba(0, 0, 0, 0.8);
     z-index: 1000;
     animation: _src_components_Modal_module__fadeon 0.3s ease 0s;
+    overflow: scroll;
 }
 
 .modalArea {

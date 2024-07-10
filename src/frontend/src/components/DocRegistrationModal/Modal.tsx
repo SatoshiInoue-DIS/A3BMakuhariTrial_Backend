@@ -27,8 +27,8 @@ const Modal: React.FC<Props> = props => {
         <Portal>
             <div
                 className={Style.modal}
-                onMouseDown={onMouseDown}
-                onMouseUp={onMouseUp}
+                // onMouseDown={onMouseDown}
+                // onMouseUp={onMouseUp}
             >
                 <div className={Style.modalArea}>
                     {React.cloneElement(props.children as any, {

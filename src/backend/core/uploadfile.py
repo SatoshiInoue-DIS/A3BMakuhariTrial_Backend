@@ -419,17 +419,17 @@ def upload_blobs(upload_file, extension, container_name):
         organized_allpages = pdf_uploader(blob_container, upload_file, pdf_file_name, original_filename, extension)
     # ファイルがエクセルの場合、各シートごとにPDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".xls", ".xlsx"):
-        # COMオブジェクトの初期化
-        pythoncom.CoInitialize()
-        # Excelアプリケーションを開く
-        excel = win32com.client.Dispatch("Excel.Application")
-        # Excelウィンドウを非表示にする
-        excel.Visible = False
-        # 入力ストリームを先頭にリセット
-        upload_file.seek(0)
-        # Excelファイルのバイトデータ
-        excel_data = upload_file.read()
         try:
+            # COMオブジェクトの初期化
+            pythoncom.CoInitialize()
+            # Excelアプリケーションを開く
+            excel = win32com.client.Dispatch("Excel.Application")
+            # Excelウィンドウを非表示にする
+            excel.Visible = False
+            # 入力ストリームを先頭にリセット
+            upload_file.seek(0)
+            # Excelファイルのバイトデータ
+            excel_data = upload_file.read()
             # 一時ファイルとしてExcelデータを保存
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel_file:
                 tmp_excel_file.write(excel_data)
@@ -462,13 +462,13 @@ def upload_blobs(upload_file, extension, container_name):
             pythoncom.CoUninitialize()
     # ファイルがワードの場合、PDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".doc", ".docx"):
-        # COMオブジェクトの初期化
-        pythoncom.CoInitialize()
-        # 入力ストリームを先頭にリセット
-        upload_file.seek(0)
-        # Wordファイルのバイトデータ
-        word_data = upload_file.read()
         try:
+            # COMオブジェクトの初期化
+            pythoncom.CoInitialize()
+            # 入力ストリームを先頭にリセット
+            upload_file.seek(0)
+            # Wordファイルのバイトデータ
+            word_data = upload_file.read()
             # 一時ファイルとしてWordデータを保存
             with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_word_file:
                 tmp_word_file.write(word_data)
@@ -493,17 +493,17 @@ def upload_blobs(upload_file, extension, container_name):
             pythoncom.CoUninitialize()
     # ファイルがパワーポイントの場合、ノード付きPDFに変換し、各ページを個別のBLOBにアップロードします。
     elif extension in (".ppt", ".pptx"):
-        # COMオブジェクトの初期化
-        pythoncom.CoInitialize()
-        # makepy ユーティリティを起動 COM の定数を利用するため
-        win32com.client.gencache.EnsureDispatch('PowerPoint.Application')
-        # Powerpointアプリケーションを開く
-        powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-        # 入力ストリームを先頭にリセット
-        upload_file.seek(0)
-        # Powerpointファイルのバイトデータ
-        powerpoint_data = upload_file.read()
         try:
+            # COMオブジェクトの初期化
+            pythoncom.CoInitialize()
+            # # makepy ユーティリティを起動 COM の定数を利用するため
+            # win32com.client.gencache.EnsureDispatch('PowerPoint.Application')
+            # Powerpointアプリケーションを開く
+            powerpoint = win32com.client.Dispatch("PowerPoint.Application")
+            # 入力ストリームを先頭にリセット
+            upload_file.seek(0)
+            # Powerpointファイルのバイトデータ
+            powerpoint_data = upload_file.read()
             # 一時ファイルとしてPowerpointデータを保存
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp_powerpoint_file:
                 tmp_powerpoint_file.write(powerpoint_data)

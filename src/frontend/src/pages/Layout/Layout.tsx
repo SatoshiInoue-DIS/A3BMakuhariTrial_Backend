@@ -6,8 +6,8 @@ import styles from './Layout.module.css'
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return (
-        <div>
-            <Header title="A3BBot管理画面" />
+        <div className={styles.outside}>
+            <Header title="アスリーブレインズBot管理画面" />
             <div className={styles.Layout}>
                 <SideNav />
                 <main className={styles.LayoutMain}>

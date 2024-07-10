@@ -1,0 +1,103 @@
+.doc_table {
+    width: 100%;
+    border-collapse:  collapse;
+}
+
+.doc_thead {
+    height: 40px;
+    color: #4D9EB7;
+}
+
+.doc_tbody>tr {
+    height: 35px;
+    border-bottom: solid 1px;
+    border-color: #b8b8b8;
+}
+
+.doc_tbody>th, .doc_tbody>td {
+    white-space:nowrap
+}
+
+.doc_cell_head {
+    position: sticky;
+    top: 0;
+    left: 0;
+    border-top: none;
+    z-index: 2;
+}
+.doc_cell_head::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    z-index: -1;
+}
+
+.doc_cell_head:first-child, .doc_cell:first-child {
+    width: 10%;
+    min-width: 40px;
+    max-width: 60px;
+    text-align: center;
+    padding-right: 30px;
+}
+
+.doc_cell_head:nth-child(2) {
+    width: 50%;
+    min-width: 300px;
+    text-align: left;
+    padding-right: 30px;
+}
+
+.doc_cell:nth-child(2) {
+    width: 50%;
+    min-width: 300px;
+    text-align: left;
+    padding-right: 30px;
+}
+
+.doc_cell_head:nth-child(3) {
+    width: 10%;
+    min-width: 100px;
+    text-align: left;
+    padding-right: 30px;
+}
+
+.doc_cell:nth-child(3) {
+    width: 10%;
+    min-width: 100px;
+    text-align: right;
+    padding-right: 30px;
+}
+
+.doc_cell_head:nth-child(4), .doc_cell:nth-child(4) {
+    width: 20%;
+    min-width: 150px;
+    text-align: left;
+    padding-right: 30px;
+}
+
+.doc_cell_head:nth-child(5), .doc_cell:nth-child(5) {
+    width: 10%;
+    min-width: 80px;
+    text-align: center;
+}
+
+.one_del_btn {
+    padding: 0;
+    border: none;
+    outline: none;
+    font: inherit;
+    color: inherit;
+    background: none
+}
+
+.one_del_btn>Img {
+    opacity: 0.7;
+}
+
+.one_del_btn>Img:hover {
+    opacity: 1;
+}

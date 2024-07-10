@@ -1,46 +1,81 @@
 .container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    height: 80vh;
+    height: calc(100vh - 100px);
+    margin: 10px;
 }
 
 .containerTable {
-    margin: 10px 10px;
     background-color: #E9F3FF;
     border-radius: 15px;
     box-shadow: 1px 1px 1px #000;
-    margin: 10px;
     height: 100%;
 }
 
 .commandsContainer {
-    height: 20vh;
+    height: 30%;
+    min-height: 135px;
+    max-height: 230px;
     margin: 0 20px;
 }
+
  .titleAndSelectArea {
     display: flex;
     justify-content: space-between;
+    padding-top: 30px;
+}
+
+.titleAndSelectArea>h3 {
+    font-size: 18px;
+    margin: 0;
 }
 .botChoiceArea {
     display: flex;
-    width: 25%;
-    justify-content: space-between;
+    min-width: 200px;
+    max-width: 300px;
+    justify-content: flex-end;
     align-items: center;
+    margin-right: 5%;
+}
+
+.botChoiceArea>p {
+    margin: 0;
+    font-size: 15px;
 }
 .botSelectBox {
-    height: 50%;
-    width: 70%;
+    margin-left: 20px;
+    height: 40px;
+    width: 180px;
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 12px;
 }
+
 .registrationDeletionArea {
     text-align: right;
+    margin-bottom: 10px;
+    position: relative;
+    top: -40px;
+    left: -20px;
+}
+
+.registrationDeletionArea>button {
+    border-radius: 10px;
+    background: #fff;
+    width: 100px;
+    height: 30px;
+    border: solid 1px;
+}
+
+.registrationDeletionArea>button:hover {
+    background: #E6E6E6;
+    color: #B60D0D;
+    border: solid 1px #000;
 }
 
 .docRegistrationButtonArea {
-    width: 150px;
     margin: 0 auto;
     text-align: center;
 }
+
 
 .border {
     border-width: 1px 0 0 0;
@@ -49,9 +84,20 @@
 }
 
 .displayRegisteredDataArea {
-    height: 56vh;
     margin: 10px;
     background-color: #fff;
     border-radius: 15px;
-    overflow-y: scroll;
+    overflow-y: auto;
+    height: calc(70% - 20px);
+    overflow-x: hidden;
+}
+
+.fileitems {
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.fileitems>p {
+    margin: 0;
 }
