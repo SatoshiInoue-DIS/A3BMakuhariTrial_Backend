@@ -57,7 +57,16 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
 IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
 
-const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp }: { columns: Column<SevedFileResponse>[]; data: SevedFileResponse[]; callback: (selected: SevedFileResponse[]) => void; bot: string; setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>; isDeleting:boolean; deleteComp:boolean;}) => {
+const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp }: 
+    { 
+        columns: Column<SevedFileResponse>[]; 
+        data: SevedFileResponse[]; 
+        callback: (selected: SevedFileResponse[]) => void; 
+        bot: string; setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; 
+        setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>; 
+        isDeleting:boolean; 
+        deleteComp:boolean;
+    }) => {
     const router = useRouter()
     
     const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SevedFileResponse>(
@@ -81,7 +90,10 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
                 {
                     Header: "削除",
                     Cell: ({ row }) => {
-                        const fileName = row.original.filename;
+                        // 型アサーションを使用
+                        const fileNameComponent = row.original.filename as unknown as React.ReactElement;
+                        const fileName = (fileNameComponent.props.children[1] as React.ReactElement).props.children;
+                        // const fileName = row.original.filename.props.children[1].props.children;
                         const fileArray = [{ filename: fileName }]
                         return (
                             <div>
@@ -93,8 +105,6 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
             ]);
         }
     );
-
-
 
     const OneDelete = ({ filename }: { filename: { filename: string }[] }) => {
         return (
@@ -130,7 +140,7 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
         setDeleteComp(false)
         router.reload()
     }
-
+    
     return (
         <>
             <table className={styles.doc_table} {...getTableProps()}>

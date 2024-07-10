@@ -186,7 +186,12 @@ const DocRegistration = () => {
     },[]);
     
     useEffect(() => {
-        const filenames = selectedRows.map(row => ({ filename: row.filename }));
+        const filenames = selectedRows.map(row => {
+            // 型アサーションを使用
+            const fileNameComponent = row.filename as unknown as React.ReactElement;
+            const fileName = (fileNameComponent.props.children[1] as React.ReactElement).props.children;
+            return ({ filename: fileName })
+        });
         setSelectedFilenames(filenames);
     }, [selectedRows]);
     
