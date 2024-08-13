@@ -8,7 +8,7 @@ import { stringify } from 'querystring';
 import path from "path";
 import Image from "next/image"
 
-const bots = ["幕張トライアル", "新卒オープン", "運営マニュアル"];
+const bots = ["テスト", "テスト", "テスト"];
 
 const columns: Array<Column<SevedFileResponse>> = 
 [
@@ -153,7 +153,7 @@ const summarizeData = (data: []): any => {
 }
 
 const DocRegistration = () => {
-    const [selectedOption, setSelectedOption] = useState<string>('幕張トライアル')
+    const [selectedOption, setSelectedOption] = useState<string>('テスト')
     const [fileinfo, setFileinfo] = useState<SevedFileResponse[]>([]);
     const [selectedRows, setSelectedRows] = useState<Array<SevedFileResponse>>([]);
     const [selectedFilenames, setSelectedFilenames] = useState<{ filename: string }[]>([{ filename: "" }]);

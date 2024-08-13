@@ -28,20 +28,33 @@ export async function deleteApi(options: {filename: string}[], bot:string): Prom
 // ドキュメントをAzure Blob Storageに登録及びAzure AI Searchの検索インデックスに登録
 export async function uploadApi(options: FormData): Promise<UploadResponse> {
     console.log(options)
-    const response = await fetch(`${apiUrl}/upload`, {
-        // multipart/form-dataを指定するとboundaryが消えるためformデータがうまく送信されないため、固定で指定する
-        // ※node-fetch側でうまくContent-Typeは設定してくれるっぽい
-        // https://qiita.com/akameco/items/dc61497ad16200c67b44
-        method: "POST",
-        body: options
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 300秒（5分）
 
-    const parsedResponse: UploadResponse = await response.json();
-    if (response.status > 299 || !response.ok) {
-        throw Error(parsedResponse.error || "Unknown error");
+    try {
+        const response = await fetch(`${apiUrl}/upload`, {
+            // multipart/form-dataを指定するとboundaryが消えるためformデータがうまく送信されないため、固定で指定する
+            // ※node-fetch側でうまくContent-Typeは設定してくれるっぽい
+            // https://qiita.com/akameco/items/dc61497ad16200c67b44
+            method: "POST",
+            body: options,
+            signal: controller.signal // タイムアウトのための信号を渡す
+        });
+
+        clearTimeout(timeoutId); // タイムアウトが発生しなかった場合、タイマーをクリア
+        
+        const parsedResponse: UploadResponse = await response.json();
+        if (response.status > 299 || !response.ok) {
+            throw Error(parsedResponse.error || "Unknown error");
+        }
+
+        return parsedResponse;
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error("Request timed out");
+        }
+        throw error; // その他のエラーはそのままスロー
     }
-
-    return parsedResponse;
 }
 
 // Azure Blob Storageに登録してあるドキュメント情報を取得する

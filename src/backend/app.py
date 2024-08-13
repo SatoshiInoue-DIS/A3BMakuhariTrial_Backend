@@ -1,6 +1,5 @@
 import os
 import time
-import pypdf
 import sys
 import openai
 
@@ -62,7 +61,7 @@ def delete():
     try:
         for f in files:
             deleteFileName = f["filename"]
-            print(botname + "から" + deleteFileName + "を削除する")
+            print(botname + "から" + deleteFileName + "を削除する", flush=True)
             # コンテナーからすべてのBLOBを取り出す。
             blobList = getAllFiles(container_name)
             # 正規表現パターン
@@ -86,7 +85,7 @@ def delete():
 #Azure Blob Storageに登録してあるドキュメント情報を取得する
 @app.route("/savedfile", methods=["POST"])
 def savedfile():
-    print(request.json["options"]["bot"])
+    print(request.json["options"]["bot"], flush=True)
     botname = request.json["options"]["bot"]
     # 選択したボットからコンテナー名を取得する
     container_name, search_index = get_container_name(botname)
@@ -101,8 +100,8 @@ def savedfile():
 @app.route("/upload", methods=["POST"])
 def upload():
     # ensure_openai_token()
-    print(request.files)
-    print(request.form["bot"])
+    print(request.files, flush=True)
+    print(request.form["bot"], flush=True)
     answer = []
     botname = request.form["bot"]
     # 選択したボットからコンテナー名を取得する

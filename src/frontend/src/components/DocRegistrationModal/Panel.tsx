@@ -164,7 +164,7 @@ const Panel: NextPage<Props> = (props) => {
                 formData.append("bot", props.bot);
             });
             const response = await uploadApi(formData);
-            
+            console.log(response.answer);
             setUploadComp(response.answer);
             setIsLoading(false);
         } catch (e) {

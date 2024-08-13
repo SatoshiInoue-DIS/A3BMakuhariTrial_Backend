@@ -74,6 +74,6 @@ def removeSearchIndex(files, search_index):
                 search_client.delete_documents(documents=[{"id":document_id}])
         except Exception as e:
             # エラー処理
-            print(f"エラー：{e}")
+            print(f"エラー：{e}", flush=True)
             success = False
     return success

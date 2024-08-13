@@ -20,7 +20,7 @@ function App({ Component, pageProps }: AppProps) {
                 <meta charSet="UTF-8" />
                 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>A3BBOT管理画面</title>
+                <title>アスリーブレインズBot管理画面</title>
             </Head>
             <Layout>
                 <Component {...pageProps} />
