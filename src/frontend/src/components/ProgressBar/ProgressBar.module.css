@@ -1,0 +1,56 @@
+.ProgressBarContainer {
+    width: 100%;
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 5px;
+    margin-bottom: 5px;
+    overflow: hidden;
+}
+
+.ByJob {
+    display: flex;
+}
+
+.ProgressBarExplain {
+    padding: 0 5px;
+}
+
+.ProgressBarExplain p {
+    margin: 0;
+    font-size: 12px;
+    text-align: left;
+    overflow-wrap: break-word;
+    white-space: normal;
+}
+
+.ProgressBar {
+    height: 10px;
+    border-radius: 2px;
+    transition: width 0.5s ease-in-out;
+}
+
+.ProgressBarSet {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ProgressBarRange {
+    width: 100%;
+    margin: 0px 5px;
+}
+
+.Explain2 {
+    margin: 5px 0
+}
+
+.Explain2>p {
+    text-align: center;
+}
+
+.ProgressBarBtn button {
+    padding: 1px 1px;
+    min-width: 50px;
+    height: 20px;
+    text-align: center;
+}

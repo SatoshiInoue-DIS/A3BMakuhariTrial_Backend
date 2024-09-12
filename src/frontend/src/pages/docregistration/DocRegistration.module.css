@@ -101,3 +101,57 @@
 .fileitems>p {
     margin: 0;
 }
+
+.updateToLatestButtonArea {
+    padding-top: 22px;
+    position: fixed;
+    z-index: 5;
+}
+
+.updateToLatestButtonArea>button {
+    text-align: center;
+    border-radius: 10px;
+    background: #fff;
+    border: solid 1px;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.updateToLatestButtonArea>button:hover {
+    background: #fffb84;
+    color: #0002ff;
+    border: solid 1px #000;
+}
+
+.btn_radius_gradient {
+    border-radius: 15px;
+    background: #66AFB3;
+    display: flex;
+    justify-content: space-between;
+    z-index: 1;
+    padding: 10px;
+}
+
+.btn_radius_gradient:hover {
+    transform: scale(1.05);
+    background: #5D9EB3;
+}
+
+.btn {
+    position: relative;
+    padding: 10px 40px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.3s;
+    text-align: center;
+    vertical-align: middle;
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    color: #ffffff;
+}
+
+.updateString {
+    padding-left: 12px;
+    padding-top: 2px;
+}

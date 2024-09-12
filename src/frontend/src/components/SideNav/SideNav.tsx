@@ -3,8 +3,24 @@ import Link from 'next/link'
 import styles from './SideNav.module.css'
 import Image from "next/image"
 import { usePathname } from 'next/navigation'
+import ProgressBar from '../ProgressBar'
 
-const SideNav = () => {
+interface ProgressPair {  
+    progress: number;  
+    requestId: string;
+    jobType: string;
+    bot: string;
+    isComp: boolean;
+    fileName: string;
+    failedFiles?: { file: File; isUploaded: boolean }[];
+    failedFilesString?: string[];
+}
+
+type SideNavProps = {  
+    progressPairs: ProgressPair[];  
+};
+
+const SideNav: React.FC<SideNavProps> = ({ progressPairs }) => {
     const pathnaem = usePathname();
 
     return (
@@ -22,6 +38,24 @@ const SideNav = () => {
                     </Link>
                 </li>
             </ul>
+            <div className={styles.ProgressBarContainer}>
+                <ul className={styles.ProgressBarList}>
+                    {progressPairs.map((pair, index) => (
+                        <li key={index}>
+                            <ProgressBar 
+                                progress={pair.progress} 
+                                requestId={pair.requestId} 
+                                jobType={pair.jobType}
+                                bot={pair.bot}
+                                isComp={pair.isComp}
+                                fileName={pair.fileName}
+                                failedFiles={pair.failedFiles}
+                                failedFilesString={pair.failedFilesString}
+                            />
+                        </li>
+                    ))}
+                </ul>
+            </div>
         </nav>
     )
 }

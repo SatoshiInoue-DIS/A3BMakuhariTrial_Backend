@@ -4,6 +4,9 @@
     max-width: 250px;
     width: 25%;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
 .SideNavList {
@@ -44,4 +47,14 @@
     justify-content: flex-start;
     font-weight: 600;
     margin-left: 15%;
+}
+
+.ProgressBarContainer {
+    margin-top: 10px;
+    padding: 0px 3px;
+}
+
+.ProgressBarList {
+    list-style: none;
+    padding-left: 0;
 }

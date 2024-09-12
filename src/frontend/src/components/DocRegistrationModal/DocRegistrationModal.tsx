@@ -3,14 +3,15 @@ import { useState } from 'react';
 import styles from "./DocRegistrationModal.module.css";
 import Modal from "./Modal";
 import Panel from "./Panel";
-import Image from "next/image"
+import Image from "next/image";
 
-interface props {
-    bot:string;
+interface Props {  
+    bot: string;  
+    addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[], failedFilesString?: string[]) => void;  
 }
-const DocRegistrationModal:React.FC<props> = ({bot}) => {
-    const [isOpenModal, setIsOpenModal] = useState(false);
 
+const DocRegistrationModal:React.FC<Props> = ({ bot, addProgressPair }) => {
+    const [isOpenModal, setIsOpenModal] = useState(false);
     const toggleModalkari = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (e.target === e.currentTarget) {
             setIsOpenModal(!isOpenModal);
@@ -27,7 +28,10 @@ const DocRegistrationModal:React.FC<props> = ({bot}) => {
             </div>
             {isOpenModal && (
                 <Modal close={toggleModalkari}>
-                    <Panel bot={bot}/>
+                    <Panel  
+                        bot={bot}  
+                        addProgressPair={addProgressPair}
+                    />  
                 </Modal>
             )}
         </div>

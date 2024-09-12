@@ -3,7 +3,7 @@ import DocRegistrationModal from '@/components/DocRegistrationModal';
 import React, { useState, useEffect, useCallback } from "react";
 import { Column } from "react-table";
 import Table from "../../components/Table/Table"
-import { SevedFileResponse, savedfileApi, SevedFileRequest, deleteApi } from "../../api";
+import { SevedFileResponse, savedfileApi, SevedFileRequest, deleteApi, generateId, checkProgress } from "../../api";
 import { stringify } from 'querystring';
 import path from "path";
 import Image from "next/image"
@@ -152,7 +152,11 @@ const summarizeData = (data: []): any => {
     return resultList;
 }
 
-const DocRegistration = () => {
+type DocRegistrationProps = {  
+    addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[], failedFilesString?: string[]) => void;  
+};
+
+const DocRegistration: React.FC<DocRegistrationProps> = ({ addProgressPair }) => {
     const [selectedOption, setSelectedOption] = useState<string>('テスト')
     const [fileinfo, setFileinfo] = useState<SevedFileResponse[]>([]);
     const [selectedRows, setSelectedRows] = useState<Array<SevedFileResponse>>([]);
@@ -180,6 +184,20 @@ const DocRegistration = () => {
     const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedOption(event.target.value)
     }
+
+    const handleUpdate = async () => {
+        try {
+            const selectedOptionRequest: SevedFileRequest = {
+                bot: selectedOption
+            };
+            const response = await savedfileApi(selectedOptionRequest);
+            const sumData = summarizeData(response)
+            const convertedResult = convertData(sumData);
+            setFileinfo(convertedResult);
+        } catch (error) {
+            console.error("Error fetching data: ", error);
+        }
+    }
     
     const handleSelectedRows = useCallback((selected: SevedFileResponse[]) => {
         setSelectedRows(selected);
@@ -195,18 +213,39 @@ const DocRegistration = () => {
         setSelectedFilenames(filenames);
     }, [selectedRows]);
     
+    const [deleteProgress, setDeleteProgress] = useState<number>(0);
+
     const makeApiRequest = async (filename: {filename: string}[], bot:string, isDeleting:boolean, deleteComp:boolean) => {
         const executePermission = confirm("本当に削除しますか？")
         if (executePermission) {
             setIsDeletingParent(isDeleting);
             setDeleteCompParent(deleteComp);
+            const job_type = "delete"
+            const delete_id = generateId()
             try {
-                const response = await deleteApi(filename, bot);
-                const findErrorFromResponse = response.some((res) => res.answer = false)
-                if (!findErrorFromResponse) {
+                // 1番目のfileの値を取得
+                const first_file_name = filename.length > 0 ? filename[0].filename : "";
+                addProgressPair(0, delete_id, job_type, bot, false, first_file_name);
+                // 進行状況の確認を開始
+                const checkProgressPromise = checkProgress(delete_id, (newProgress: number) => {  
+                    setDeleteProgress(newProgress);  
+                    addProgressPair(newProgress, delete_id, job_type, bot, false, first_file_name);
+                });
+                const response = await deleteApi(filename, bot, delete_id);
+                // checkProgressPromiseの結果を待つ
+                const progressResult = await checkProgressPromise;
+                const { progress, isComp } = progressResult;
+                // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
+                if (progress < 100 && response.failed_files && response.failed_files?.length > 0) {
+                    const failed_files_string = response.failed_files || [];
+                    if (failed_files_string.length > 0) {
+                        addProgressPair(progress, delete_id, job_type, bot, isComp, first_file_name, undefined, failed_files_string);
+                    }
+                } else {
+                    addProgressPair(progress, delete_id, job_type, bot, isComp, first_file_name);
+                }
                     setIsDeletingParent(false);
                     setDeleteCompParent(true);
-                }
             } catch (e) {
                 alert(`削除処理中にエラーが発生しました: ${e}`);
             } finally {
@@ -229,8 +268,16 @@ const DocRegistration = () => {
                             </select>
                         </div>
                     </div>
+                    <div className={styles.updateToLatestButtonArea}>
+                        <button onClick={() => handleUpdate()}>
+                            <Image src="/update.png" width={20} height={20} alt="update_icon" />
+                            <span className={styles.updateString}>
+                                最新の状態に更新する
+                            </span>
+                        </button>
+                    </div>
                     <div className={styles.docRegistrationButtonArea}>
-                        <DocRegistrationModal {...{bot:selectedOption}}/>
+                        <DocRegistrationModal {...{bot:selectedOption}} addProgressPair={addProgressPair} /> 
                     </div>
                     <div className={styles.registrationDeletionArea}>
                         <button onClick={() => makeApiRequest(selectedFilenames, selectedOption, true, false)}>一括削除</button>
@@ -247,7 +294,8 @@ const DocRegistration = () => {
                             setIsDeleting={setIsDeletingParent} 
                             isDeleting={isDeletingParent} 
                             setDeleteComp={setDeleteCompParent} 
-                            deleteComp={deleteCompParent} 
+                            deleteComp={deleteCompParent}
+                            addProgressPair={addProgressPair}
                         />
                     </section>
                 </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Style from "./Panel.module.css";
 import type { NextPage } from "next";
 import { useDropzone } from "react-dropzone";
@@ -7,24 +7,25 @@ import type { FileRejection } from "react-dropzone";
 import File from "public/file.svg";
 import Trash from "public/trash.svg";
 import Image from "next/image";
-import { UploadRequest, uploadApi } from "../../api";
+import { UploadRequest, uploadApi, generateId, checkProgress } from "../../api";
 import Router, { useRouter } from 'next/router'
+import e from "express";
+import { error } from "console";
 
-
-type Props = {
+type Props = {  
+    bot: string;  
+    addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[], failedFilesString?: string[]) => void;
     close?: (e: any) => void;
-    bot: string;
-};
+};  
 
-const Panel: NextPage<Props> = (props) => {
+const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
     const submit = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
-        if (props.close) {
-            props.close(e);
+        if (close) {
+            close(e);
         }
     };
     const router = useRouter()
-
     const [currentShowFiles, setCurrentShowFiles] = useState<{ file: File; isUploaded: boolean }[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -33,15 +34,8 @@ const Panel: NextPage<Props> = (props) => {
         try {
             setCurrentShowFiles((prevFiles) => [
                 ...prevFiles,
-                { file, isUploaded: false },
+                { file, isUploaded: true },
             ]);
-            const uploadTime = Math.random(); // 1秒から10秒
-            await new Promise((resolve) => setTimeout(resolve, uploadTime));
-            setCurrentShowFiles((prevFiles) =>
-                prevFiles.map((f) =>
-                f.file.name === file.name ? { ...f, isUploaded: true } : f,
-                ),
-            );
         } catch (error) {
             // ↓ここでエラーに関するユーザーへの通知や処理を行う
             alert(`アップロード中にエラーが発生しました: ${error}`);
@@ -50,7 +44,6 @@ const Panel: NextPage<Props> = (props) => {
     
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
-
             // ドロップしたファイルの中で、現在表示されているファイルと重複しているもの( filename と size が同じファイル)を除外する。
             const filteringFiles = acceptedFiles.filter(
                 (file) =>
@@ -60,27 +53,15 @@ const Panel: NextPage<Props> = (props) => {
                     file.size === showFile.file.size,
                 ),
             );
-
             // ドロップしたファイルと現在表示されているファイルの合計が 10 を超える場合、追加を許可しない。
             if (filteringFiles.length + currentShowFiles.length > 10) {
                 alert("最大10ファイルまでアップロードできます。");
                 return;
             }
-
             // アップロード可能なファイルが存在する場合、アップロード中のスイッチを true にし、アップロードを開始する
             if (filteringFiles.length) {
                 try {
                     await Promise.all(filteringFiles.map((file) => onUploadFile(file)));
-                    // ↓すべてのファイルのアップロードが成功した後の処理を書く
-
-
-                    // const formData = new FormData();
-
-                    // filteringFiles.forEach((file) => {
-                    //     formData.append("file", file)
-                    //     console.log(formData.entries())
-                    // })
-
                 } catch (error) {
                     // ↓ここでエラーに関するユーザーへの通知や処理を行う
                     alert(`アップロード中にエラーが発生しました: ${error}`);
@@ -145,7 +126,7 @@ const Panel: NextPage<Props> = (props) => {
             return "";
         }
     };
-
+    // 登録するファイル群から指定したファイルを取り除く
     const removeFile = (index: number) => {
         const filteringFiles = currentShowFiles.filter(
             (_, i) => i !== index,
@@ -154,31 +135,60 @@ const Panel: NextPage<Props> = (props) => {
     };
 
     const [uploadComp, setUploadComp] = useState<boolean>(false);
-
+    const [uploadProgress, setUploadProgress] = useState<number>(0);
+    
     const makeApiRequest = async () => {
         setIsLoading(true);
+        // const executePermission = confirm("アップロードを開始しました。\r\n完了するまでお待ちください。")
         try {
             const formData = new FormData();
+            const job_type = "upload"
+            const upload_id = generateId()
             currentShowFiles.forEach((fileInfo) => {
                 formData.append("file", fileInfo.file);
-                formData.append("bot", props.bot);
+                formData.append("bot", bot);
+                formData.append("upload_id", upload_id);
+            });
+            // 1番目のfileの値を取得
+            const first_file_name = currentShowFiles.length > 0 ? currentShowFiles[0].file.name : "";
+            addProgressPair(0, upload_id, job_type, bot, false, first_file_name);
+            // 進行状況の確認を開始
+            const checkProgressPromise = checkProgress(upload_id, (newProgress: number) => {  
+                setUploadProgress(newProgress);  
+                addProgressPair(newProgress, upload_id, job_type, bot, false, first_file_name); // Update progress  
             });
             const response = await uploadApi(formData);
-            console.log(response.answer);
+            // checkProgressPromiseの結果を待つ
+            const progressResult = await checkProgressPromise;
+            const { progress, isComp } = progressResult;
+            // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
+            if (progress < 100 && response.failed_files && response.failed_files?.length > 0) {
+                const failed_files = response.failed_files || [];
+                if (failed_files.length > 0) {
+                    const failedFileObjects = currentShowFiles.filter(fileInfo =>
+                        failed_files.some(failedFile => failedFile === fileInfo.file.name)
+                    );
+                    addProgressPair(progress, upload_id, job_type, bot, isComp, first_file_name, failedFileObjects);
+                }
+            } else {
+                addProgressPair(progress, upload_id, job_type, bot, isComp, first_file_name);
+            }
             setUploadComp(response.answer);
-            setIsLoading(false);
         } catch (e) {
             // setError(e);
             alert(`アップロード中にエラーが発生しました: ${e}`);
-            setIsLoading(false);
         } finally {
             setIsLoading(false);
         }
     };
 
     const comp = () => {
-        props.close
+        close
         router.reload()
+    }
+
+    const ok = () => {
+        setIsLoading(false);
     }
 
     return (
@@ -188,16 +198,20 @@ const Panel: NextPage<Props> = (props) => {
                     {isLoading ? (
                         <>
                             <div>
-                                <p>アップロード中です。</p>
+                                <p>アップロードを開始しました。</p>
+                                <p>完了するまでお待ちください。</p>
+                                <button type="button" onClick={close}>OK</button>
                             </div>
                         </>
                     ) : (
                         <>
                             <div>
+                                <div className={Style.modalPanelTop}>
+                                    <h2><span>選択中のボット：</span>{bot}</h2>
+                                    <button className={Style.close_btn} type="button" onClick={close}>×</button>
+                                </div>
                                 <header className={Style.modalPanelHeader}>
                                     <h3>ファイルのアップロード</h3>
-                                    <p>{props.bot}</p>
-                                    <button className={Style.close_btn} type="button" onClick={props.close}>×</button>
                                 </header>
                                 <div
                                     {...getRootProps()}

@@ -1,6 +1,6 @@
-import { SevedFileResponse, deleteApi } from "../../api";
+import { SevedFileResponse, deleteApi, generateId, checkProgress } from "../../api";
 
-import React, { forwardRef, useRef, useEffect } from 'react';
+import React, { forwardRef, useRef, useEffect, useState } from 'react';
 import { useTable, Column, useSortBy, useRowSelect } from 'react-table';
 import Router, { useRouter } from 'next/router';
 import styles from './Table.module.css';
@@ -11,13 +11,13 @@ type Props = {
     files: SevedFileResponse[];
 };
 
+type DocRegistrationProps = {  
+    addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles: File[]) => void;  
+};
 
 interface IIndeterminateInputProps {
     indeterminate?: boolean;
     name: string;
-    // tableColumns: any;
-    // files: SevedFileResponse[];
-    
 }
 const useCombinedRefs = ( ...refs: Array<React.Ref<HTMLInputElement> | React.MutableRefObject<HTMLInputElement | null>> ): React.MutableRefObject<HTMLInputElement | null> => {
     const targetRef = useRef<HTMLInputElement | null>(null);
@@ -57,15 +57,17 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
 IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
 
-const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp }: 
+const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp, addProgressPair }: 
     { 
         columns: Column<SevedFileResponse>[]; 
         data: SevedFileResponse[]; 
         callback: (selected: SevedFileResponse[]) => void; 
-        bot: string; setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; 
+        bot: string;
+        setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; 
         setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>; 
         isDeleting:boolean; 
         deleteComp:boolean;
+        addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[] | undefined, failedFilesString?: string[] | undefined ) => void;
     }) => {
     const router = useRouter()
     
@@ -114,17 +116,34 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
         )
     }
     
+    const [deleteProgress, setDeleteProgress] = useState<number>(0);
+
     const makeApiRequest = async (filename: {filename: string}[], bot: string, isdel: boolean, delcom: boolean) => {
         const executePermission = confirm("本当に削除しますか？")
         if (executePermission) {
-            setIsDeleting(isdel)
-            setDeleteComp(delcom)
+            const job_type = "oneDelete"
+            const one_delete_id = generateId()
             try {
-                const response = await deleteApi(filename, bot);
-                const findErrorFromResponse = response.some((res) => res.answer = false)
-                if (!findErrorFromResponse) {
-                    setIsDeleting(false)
-                    setDeleteComp(true)
+                // fileの名前を取得
+                const file_name = filename.length > 0 ? filename[0].filename : "";
+                addProgressPair(0, one_delete_id, job_type, bot, false, file_name);
+                // 進行状況の確認を開始
+                const checkProgressPromise = checkProgress(one_delete_id, (newProgress: number) => {  
+                    setDeleteProgress(newProgress);  
+                    addProgressPair(newProgress, one_delete_id, job_type, bot, false, file_name);
+                });
+                const response = await deleteApi(filename, bot, one_delete_id);
+                // checkProgressPromiseの結果を待つ
+                const progressResult = await checkProgressPromise;
+                const { progress, isComp } = progressResult;
+                // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
+                if (progress < 100 && response.failed_files && response.failed_files?.length > 0) {
+                    const failed_files_string = response.failed_files || [];
+                    if (failed_files_string.length > 0) {
+                        addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name, undefined, failed_files_string);
+                    }
+                } else {
+                    addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name);
                 }
             } catch (e) {
                 alert(`削除処理中にエラーが発生しました: ${e}`);
@@ -134,12 +153,6 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
     };
     
     useEffect(() => { callback(selectedFlatRows.map((d) => d.original)); }, [callback, selectedFlatRows]);
-    
-    const comp = () => {
-        setIsDeleting(false)
-        setDeleteComp(false)
-        router.reload()
-    }
     
     return (
         <>
@@ -168,41 +181,24 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
                         );
                     })}
                 </thead>
-                {!deleteComp ? (
-                    <>
-                        {isDeleting ? (
-                            <>
-                                <div>
-                                    <p>削除中です。</p>
-                                </div>
-                            </>
-                        ) : (
-                            <tbody className={styles.doc_tbody} {...getTableBodyProps()}>
-                                {rows.map((row) => {
-                                    prepareRow(row);
-                                    const { key, ...restRowProps } = row.getRowProps();
+                <tbody className={styles.doc_tbody} {...getTableBodyProps()}>
+                    {rows.map((row) => {
+                        prepareRow(row);
+                        const { key, ...restRowProps } = row.getRowProps();
+                        return (
+                            <tr {...restRowProps} key={key}>
+                                {row.cells.map((cell) => {
+                                    const { key, ...restCellProps } = cell.getCellProps();
                                     return (
-                                        <tr {...restRowProps} key={key}>
-                                            {row.cells.map((cell) => {
-                                                const { key, ...restCellProps } = cell.getCellProps();
-                                                return (
-                                                    <td className={styles.doc_cell} {...restCellProps} key={key}>
-                                                        {cell.render('Cell')}
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
+                                        <td className={styles.doc_cell} {...restCellProps} key={key}>
+                                            {cell.render('Cell')}
+                                        </td>
                                     );
                                 })}
-                            </tbody>
-                        )}
-                    </>
-                ) : (
-                    <>
-                        <p>削除が完了しました。</p>
-                        <button type="button" onClick={comp}>OK</button>
-                    </>
-                )}
+                            </tr>
+                        );
+                    })}
+                </tbody>
             </table>
         </>
     );

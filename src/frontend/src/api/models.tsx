@@ -6,13 +6,15 @@ export type UploadRequest = {
 
 export type UploadResponse = {
     answer: boolean;
+    failed_files?: string[];
     error?: string;
 }
 
 export type DeleteResponse = {
     answer: boolean;
+    failed_files?: string[];
     error?: string;
-}[]
+}
 
 export type SevedFileRequest = {
     bot: string;

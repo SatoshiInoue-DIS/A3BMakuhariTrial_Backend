@@ -9,24 +9,25 @@ import tempfile
 import win32com.client
 from win32com.client import constants
 import win32com.client.gencache
+import asyncio
 
 from docx2pdf import convert
 from dotenv import load_dotenv
 from pypdf import PdfReader, PdfWriter
 
 from openai import AzureOpenAI
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import get_bearer_token_provider
 
 from azure.identity import DefaultAzureCredential
 from azure.identity import ManagedIdentityCredential
 from azure.identity import AzureDeveloperCliCredential
 from azure.core.credentials import AzureKeyCredential
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.storage.blob import BlobServiceClient
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient, SearchIndexerClient
 from azure.search.documents.indexes.models import *
 from azure.ai.formrecognizer import DocumentAnalysisClient
-
+import concurrent.futures
 
 
 # .envファイルの内容を読み込見込む
@@ -53,7 +54,6 @@ AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
 TEMP_DIRECTORY = os.environ.get("TEMP_DIRECTORY")
 
 azure_credential = DefaultAzureCredential()
-
 
 # BlobServiceClientの作成
 blob_service = BlobServiceClient(
@@ -206,7 +206,7 @@ def get_page_map(results, offset):
     return page_map
 
 #  直接blobのURLを見に行きPDFからテキストを抽出します。Document intelligenceサービスを使用します。
-def get_document_text(filename, container_name, extension):
+async def get_document_text(filename, container_name, extension, request_id):
     """
     PDF →   PDF,
     TEXT    →   TXT,
@@ -219,6 +219,7 @@ def get_document_text(filename, container_name, extension):
     """
     offset = 0
     page_map = []
+    print(f"request_id:'{request_id}'", flush=True)
     # BLOLに保存されたファイルのURL
     blob_url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{container_name}/{filename}"
     # DocumentAnalysisClient は、ドキュメントと画像からの情報を分析します。
@@ -362,7 +363,7 @@ def split_text(page_map):
         yield (all_text[start:end], find_page(start))
 
 # セクションを検索インデックスにインデックスします。
-def index_sections(filename, sections, search_index):
+async def index_sections(filename, sections, search_index):
     search_client = SearchClient(
         endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
         index_name=search_index,
@@ -377,21 +378,27 @@ def index_sections(filename, sections, search_index):
         if i % 1000 == 0:
             results = search_client.upload_documents(documents=batch)
             succeeded = sum([1 for r in results if r.succeeded])
-            print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功", flush=True)
+            print(f"{len(results)} セクションのインデックス、 {succeeded} 成功", flush=True)
             batch = []
     if len(batch) > 0:
         results = search_client.upload_documents(documents=batch)
         succeeded = sum([1 for r in results if r.succeeded])
-        print(f"\t {len(results)} セクションのインデックス、 {succeeded} 成功", flush=True)  
+        print(f"{len(results)} セクションのインデックス、 {succeeded} 成功", flush=True)
+    return ({
+        "file_name": filename,
+        "sections": sections,
+    }
+
+    )
 
 
-def pdf_uploader(blob_container, upload_file, filename, original_filename, extension):
+async def pdf_uploader(blob_container, upload_file, filename, original_filename, extension):
     organized_allpages = []
     reader = PdfReader(upload_file)
     pages = reader.pages
     for i in range(len(pages)):
         blob_name = blob_name_from_file_page(filename, i)
-        print(f"\t {i} ページの BLOB をアップロードしています -> {blob_name}", flush=True)
+        print(f"{i} ページの BLOB をアップロードしています -> {blob_name}", flush=True)
         f = io.BytesIO()
         writer = PdfWriter()
         writer.add_page(pages[i])
@@ -399,178 +406,195 @@ def pdf_uploader(blob_container, upload_file, filename, original_filename, exten
         f.seek(0)
         # メタデータを設定
         metadata = makeMetaData(original_filename, extension)
-        blob_container.upload_blob(blob_name, f, overwrite=True, metadata=metadata)
+        await blob_container.upload_blob(blob_name, f, overwrite=True, metadata=metadata)
         organized_allpages.append(blob_name)
     return organized_allpages
 
 # 指定されたファイルをAzure Blob Storageにアップロードします。PDFの場合、各ページを個別のBlobとしてアップロードします。
-def upload_blobs(upload_file, extension, container_name):
-    blob_container = blob_service.get_container_client(container_name)
-    # コンテナーがなければ作成
-    if not blob_container.exists():
-        blob_container.create_container()
-        print(f"{container_name}コンテナーを作成しました", flush=True)
-    # ファイル名
-    original_filename = upload_file.filename
-    # 整理された全ページを入れる
-    organized_allpages = []
-    # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
-    if extension == ".pdf":
-        # 新しいPDFファイル名を生成（[PDFファイル名].pdf）
-        pdf_file_name = original_filename + ".pdf"
-        organized_allpages = pdf_uploader(blob_container, upload_file, pdf_file_name, original_filename, extension)
-    # ファイルがエクセルの場合、各シートごとにPDFに変換し、各ページを個別のBLOBにアップロードします。
-    elif extension in (".xls", ".xlsx"):
-        try:
-            # COMオブジェクトの初期化
-            pythoncom.CoInitialize()
-            # Excelアプリケーションを開く
-            excel = win32com.client.Dispatch("Excel.Application")
-            # Excelウィンドウを非表示にする
-            excel.Visible = False
-            # 入力ストリームを先頭にリセット
-            upload_file.seek(0)
-            # Excelファイルのバイトデータ
-            excel_data = upload_file.read()
-            # 一時ファイルとしてExcelデータを保存
-            if extension == ".xlsx":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel_file:
-                    tmp_excel_file.write(excel_data)
-                    tmp_excel_file_path = tmp_excel_file.name
-            elif extension == ".xls":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xls') as tmp_excel_file:
-                    tmp_excel_file.write(excel_data)
-                    tmp_excel_file_path = tmp_excel_file.name
-            # Excelファイルを開く
-            wb = excel.Workbooks.Open(tmp_excel_file_path)
-            tmp_pdf_file_dir = os.path.dirname(tmp_excel_file_path)
-            # 各シートをPDFに変換する
-            for sheet in wb.Sheets:
-                # 新しいPDFファイル名を生成（[エクセルファイル名]－[シート名].pdf）
-                pdf_file_name = original_filename + f"-{sheet.name}" + ".pdf"
-                # PDF変換して保存する場所
-                tmp_pdf_file_path = tmp_pdf_file_dir + "/" + pdf_file_name
-                # シートをPDFに変換する
-                sheet.ExportAsFixedFormat(0, tmp_pdf_file_path, 0, 1, 0, 1, sheet.PageSetup.Pages.Count, 0)
-                print(f"Excelファイルのシート {sheet.name} を PDF に変換しました。", flush=True)
-                # 生成されたPDFの内容を読み込む
-                with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                    organized_page = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
-                organized_allpages.append(organized_page[0])
-                # PDFの一時ファイルを削除する
-                os.remove(tmp_pdf_file_path)
-        finally:
-            # Excelファイルを閉じる
-            wb.Close(False)
-            # Excelアプリケーションを終了
-            excel.Quit()
-            # Excelの一時ファイルを削除する
-            os.remove(tmp_excel_file_path)
-            # 終了した後はこれを呼び出す
-            pythoncom.CoUninitialize()
-    # ファイルがワードの場合、PDFに変換し、各ページを個別のBLOBにアップロードします。
-    elif extension in (".doc", ".docx"):
-        try:
-            # COMオブジェクトの初期化
-            pythoncom.CoInitialize()
-            # 入力ストリームを先頭にリセット
-            upload_file.seek(0)
-            # Wordファイルのバイトデータ
-            word_data = upload_file.read()
-            # 一時ファイルとしてWordデータを保存
-            if extension == ".docx":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_word_file:
-                    tmp_word_file.write(word_data)
-                    tmp_word_file_path = tmp_word_file.name
-            elif extension == ".doc":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.doc') as tmp_word_file:
-                    tmp_word_file.write(word_data)
-                    tmp_doc_file_path = tmp_word_file.name
-                # *.docファイルを*.docxファイルに変換
-                tmp_docx_file_path = doc_to_docx(tmp_doc_file_path)
-                tmp_word_file_path = tmp_docx_file_path
-            # PDF出力用の一時ファイルを作成
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf_file:
-                tmp_pdf_file_path = tmp_pdf_file.name
-            # WordファイルをPDFに変換
-            convert(tmp_word_file_path, tmp_pdf_file_path)
-            print(f"Wordファイル {original_filename} をPDFに変換しました", flush=True)
-             # 新しいPDFファイル名を生成（[Wordファイル名].pdf）
+async def upload_blobs(upload_file, extension, container_name):
+    
+    from azure.identity.aio import DefaultAzureCredential
+    from azure.storage.blob.aio import BlobServiceClient, BlobClient, ContainerClient
+    async_azure_credential = DefaultAzureCredential()
+    # blob_container = blob_service.get_container_client(container_name)
+    async with BlobServiceClient(account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net", credential=async_azure_credential) as async_blob_service:
+        blob_container = async_blob_service.get_container_client(container_name)
+        # コンテナーがなければ作成
+        if not await blob_container.exists():
+            blob_container.create_container()
+            print(f"{container_name}コンテナーを作成しました", flush=True)
+        else:
+            print(f"{container_name}コンテナーはすでに存在します", flush=True)
+        # ファイル名
+        original_filename = upload_file.filename
+        # 整理された全ページを入れる
+        organized_allpages = []
+        # ファイルが PDF の場合はページに分割し、各ページを個別の BLOB としてアップロードします
+        if extension == ".pdf":
+            # 新しいPDFファイル名を生成（[PDFファイル名].pdf）
             pdf_file_name = original_filename + ".pdf"
-            # 生成されたPDFの内容を読み込む
-            with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
-        finally:
-            # Wordの一時ファイルを削除する
-            os.remove(tmp_word_file_path)
-            # PDFの一時ファイルを削除する
-            os.remove(tmp_pdf_file_path)
-            # COMオブジェクトの解放
-            pythoncom.CoUninitialize()
-    # ファイルがパワーポイントの場合、ノート付きPDFに変換し、各ページを個別のBLOBにアップロードします。
-    elif extension in (".ppt", ".pptx"):
+            organized_allpages = await pdf_uploader(blob_container, upload_file, pdf_file_name, original_filename, extension)
+        elif extension in (".xls", ".xlsx", ".doc", ".docx", ".ppt", ".pptx"):
+            organized_allpages = await process_file(upload_file, extension, blob_container, original_filename)
+        # ファイルがテキスト・画像(.txt,.png,.jpg,.jpeg)の場合、そのままBLOBにアップロードします。
+        else :
+            blob_name = blob_name_from_file_page(original_filename)
+            # メタデータを設定
+            metadata = makeMetaData(original_filename, extension)
+            await blob_container.upload_blob(blob_name, upload_file, overwrite=True, metadata=metadata)
+            organized_allpages.append(blob_name)
+        print(f"Azure Blob Starageへ {original_filename} の書き込みが終わりました。", flush=True)
+        await blob_container.close()
+    return organized_allpages
+
+
+async def process_file(upload_file, extension, blob_container, original_filename):
+    lock = asyncio.Lock()
+    async with lock:
+        # 整理された全ページを入れる
+        organized_allpages = []
         # COMオブジェクトの初期化
         pythoncom.CoInitialize()
-        # makepy ユーティリティを起動 COM の定数を利用するため
-        win32com.client.gencache.EnsureDispatch('PowerPoint.Application')
-        # Powerpointアプリケーションを開く
-        powerpoint = win32com.client.Dispatch('PowerPoint.Application')
-        # 入力ストリームを先頭にリセット
-        upload_file.seek(0)
-        # Powerpointファイルのバイトデータ
-        powerpoint_data = upload_file.read()
         try:
-            # 一時ファイルとしてPowerpointデータを保存
-            if extension == ".pptx":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp_powerpoint_file:
-                    tmp_powerpoint_file.write(powerpoint_data)
-                    tmp_powerpoint_file_path = tmp_powerpoint_file.name
-            elif extension == ".ppt":
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.ppt') as tmp_powerpoint_file:
-                    tmp_powerpoint_file.write(powerpoint_data)
-                    tmp_powerpoint_file_path = tmp_powerpoint_file.name
-            tmp_pdf_file_dir = os.path.dirname(tmp_powerpoint_file_path)
-            # 新しいPDFファイル名を生成（[PowerPointファイル名].pdf）
-            pdf_file_name = original_filename + ".pdf"
-            # PDF変換して保存する場所
-            tmp_pdf_file_path = os.path.join(tmp_pdf_file_dir, pdf_file_name)
-            # Powerpointファイルを開きPDF形式で保存
-            presentation = powerpoint.Presentations.Open(tmp_powerpoint_file_path, WithWindow=False)
-            # PrintOptionsを設定してノート付きのレイアウトにする
-            presentation.PrintOptions.OutputType = constants.ppPrintOutputNotesPages
-            # PDFに変換する
-            presentation.ExportAsFixedFormat(
-                tmp_pdf_file_path,  #エクスポートするPDFファイルのパス
-                constants.ppFixedFormatTypePDF,  #エクスポートするファイルの形式
-                PrintRange=None,  #印刷範囲
-                Intent=constants.ppFixedFormatIntentPrint,  #エクスポートの品質.印刷用
-                HandoutOrder=constants.ppPrintHandoutVerticalFirst,  #配布資料の順序.垂直方向
-                OutputType=constants.ppPrintOutputNotesPages,  #出力形式.ノート付きのスライド
-                RangeType=constants.ppPrintAll,  #印刷するスライドの範囲.すべてのスライド
-            )
-            print(f"PowerPointファイル {original_filename} をPDFに変換しました", flush=True)
-            # 生成されたPDFの内容を読み込む
-            with open(tmp_pdf_file_path, 'rb') as pdf_file:
-                organized_allpages = pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
-            # PDFの一時ファイルを削除する
-            os.remove(tmp_pdf_file_path)
+            # ファイルがエクセルの場合、各シートごとにPDFに変換し、各ページを個別のBLOBにアップロードします。
+            if extension in (".xls", ".xlsx"):
+                try:
+                    # Excelアプリケーションを開く
+                    excel = win32com.client.Dispatch("Excel.Application")
+                    # Excelウィンドウを非表示にする
+                    excel.Visible = False
+                    # 入力ストリームを先頭にリセット
+                    upload_file.seek(0)
+                    # Excelファイルのバイトデータ
+                    excel_data = upload_file.read()
+                    # 一時ファイルとしてExcelデータを保存
+                    if extension == ".xlsx":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel_file:
+                            tmp_excel_file.write(excel_data)
+                            tmp_excel_file_path = tmp_excel_file.name
+                    elif extension == ".xls":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xls') as tmp_excel_file:
+                            tmp_excel_file.write(excel_data)
+                            tmp_excel_file_path = tmp_excel_file.name
+                    # Excelファイルを開く
+                    wb = excel.Workbooks.Open(tmp_excel_file_path)
+                    tmp_pdf_file_dir = os.path.dirname(tmp_excel_file_path)
+                    # 各シートをPDFに変換する
+                    for sheet in wb.Sheets:
+                        try:
+                            # 新しいPDFファイル名を生成（[エクセルファイル名]－[シート名].pdf）
+                            pdf_file_name = f"{original_filename}-{sheet.name}.pdf"
+                            # PDF変換して保存する場所
+                            tmp_pdf_file_path_for_excel = os.path.join(tmp_pdf_file_dir, pdf_file_name)
+                            # シートをPDFに変換する
+                            sheet.ExportAsFixedFormat(0, tmp_pdf_file_path_for_excel, 0, 1, 0, 1, sheet.PageSetup.Pages.Count, 0)
+                            print(f"Excelファイルのシート {sheet.name} を PDF に変換しました。", flush=True)
+                            # 生成されたPDFの内容を読み込む
+                            with open(tmp_pdf_file_path_for_excel, 'rb') as pdf_file:
+                                organized_page = await pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
+                            organized_allpages.append(organized_page[0])
+                        finally:
+                            # PDFの一時ファイルを削除する
+                            os.remove(tmp_pdf_file_path_for_excel)
+                except Exception as e:
+                    print(f"Error: {e}")
+                finally:
+                    # Excelファイルを閉じる
+                    wb.Close(False)
+                    # Excelアプリケーションを終了
+                    excel.Quit()
+                    # Excelの一時ファイルを削除する
+                    os.remove(tmp_excel_file_path)
+            # ファイルがワードの場合、PDFに変換し、各ページを個別のBLOBにアップロードします。
+            elif extension in (".doc", ".docx"):
+                try:
+                    # 入力ストリームを先頭にリセット
+                    upload_file.seek(0)
+                    # Wordファイルのバイトデータ
+                    word_data = upload_file.read()
+                    # 一時ファイルとしてWordデータを保存
+                    if extension == ".docx":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_word_file:
+                            tmp_word_file.write(word_data)
+                            tmp_word_file_path = tmp_word_file.name
+                    elif extension == ".doc":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.doc') as tmp_word_file:
+                            tmp_word_file.write(word_data)
+                            tmp_doc_file_path = tmp_word_file.name
+                        # *.docファイルを*.docxファイルに変換
+                        tmp_docx_file_path = doc_to_docx(tmp_doc_file_path)
+                        tmp_word_file_path = tmp_docx_file_path
+                    # PDF出力用の一時ファイルを作成
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf_file:
+                        tmp_pdf_file_path_for_word = tmp_pdf_file.name
+                    # WordファイルをPDFに変換
+                    convert(tmp_word_file_path, tmp_pdf_file_path_for_word)
+                    print(f"Wordファイル {original_filename} をPDFに変換しました", flush=True)
+                    # 新しいPDFファイル名を生成（[Wordファイル名].pdf）
+                    pdf_file_name = original_filename + ".pdf"
+                    # 生成されたPDFの内容を読み込む
+                    with open(tmp_pdf_file_path_for_word, 'rb') as pdf_file:
+                        organized_allpages = await pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
+                finally:
+                    # Wordの一時ファイルを削除する
+                    os.remove(tmp_word_file_path)
+                    # PDFの一時ファイルを削除する
+                    os.remove(tmp_pdf_file_path_for_word)
+            # ファイルがパワーポイントの場合、ノート付きPDFに変換し、各ページを個別のBLOBにアップロードします。
+            elif extension in (".ppt", ".pptx"):
+                try:
+                    # makepy ユーティリティを起動 COM の定数を利用するため
+                    win32com.client.gencache.EnsureDispatch('PowerPoint.Application')
+                    # Powerpointアプリケーションを開く
+                    powerpoint = win32com.client.Dispatch('PowerPoint.Application')
+                    # 入力ストリームを先頭にリセット
+                    upload_file.seek(0)
+                    # Powerpointファイルのバイトデータ
+                    powerpoint_data = upload_file.read()
+                    # 一時ファイルとしてPowerpointデータを保存
+                    if extension == ".pptx":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp_powerpoint_file:
+                            tmp_powerpoint_file.write(powerpoint_data)
+                            tmp_powerpoint_file_path = tmp_powerpoint_file.name
+                    elif extension == ".ppt":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.ppt') as tmp_powerpoint_file:
+                            tmp_powerpoint_file.write(powerpoint_data)
+                            tmp_powerpoint_file_path = tmp_powerpoint_file.name
+                    tmp_pdf_file_dir = os.path.dirname(tmp_powerpoint_file_path)
+                    # 新しいPDFファイル名を生成（[PowerPointファイル名].pdf）
+                    pdf_file_name = f"{original_filename}.pdf"
+                    # PDF変換して保存する場所
+                    tmp_pdf_file_path_for_pp = os.path.join(tmp_pdf_file_dir, pdf_file_name)
+                    # Powerpointファイルを開きPDF形式で保存
+                    presentation = powerpoint.Presentations.Open(tmp_powerpoint_file_path, WithWindow=False)
+                    # PrintOptionsを設定してノート付きのレイアウトにする
+                    presentation.PrintOptions.OutputType = constants.ppPrintOutputNotesPages
+                    # PDFに変換する
+                    presentation.ExportAsFixedFormat(
+                        tmp_pdf_file_path_for_pp,  #エクスポートするPDFファイルのパス
+                        constants.ppFixedFormatTypePDF,  #エクスポートするファイルの形式
+                        PrintRange=None,  #印刷範囲
+                        Intent=constants.ppFixedFormatIntentPrint,  #エクスポートの品質.印刷用
+                        HandoutOrder=constants.ppPrintHandoutVerticalFirst,  #配布資料の順序.垂直方向
+                        OutputType=constants.ppPrintOutputNotesPages,  #出力形式.ノート付きのスライド
+                        RangeType=constants.ppPrintAll,  #印刷するスライドの範囲.すべてのスライド
+                    )
+                    print(f"PowerPointファイル {original_filename} をPDFに変換しました", flush=True)
+                    # 生成されたPDFの内容を読み込む
+                    with open(tmp_pdf_file_path_for_pp, 'rb') as pdf_file:
+                        organized_allpages = await pdf_uploader(blob_container, pdf_file, pdf_file_name, original_filename, extension)
+                finally:
+                    # PDFの一時ファイルを削除する
+                    os.remove(tmp_pdf_file_path_for_pp)
+                    # Powerpointファイルを閉じる
+                    presentation.Close()
+                    # Powerpointアプリケーションを終了
+                    powerpoint.Quit()
+                    # Powerpointの一時ファイルを削除する
+                    os.remove(tmp_powerpoint_file_path)
         finally:
-            # Powerpointファイルを閉じる
-            presentation.Close()
-            # Powerpointアプリケーションを終了
-            powerpoint.Quit()
-            # Powerpointの一時ファイルを削除する
-            os.remove(tmp_powerpoint_file_path)
             # 終了した後はこれを呼び出す
             pythoncom.CoUninitialize()
-    # ファイルがテキスト・画像(.txt,.png,.jpg,.jpeg)の場合、そのままBLOBにアップロードします。
-    else :
-        blob_name = blob_name_from_file_page(original_filename)
-        # メタデータを設定
-        metadata = makeMetaData(original_filename, extension)
-        blob_container.upload_blob(blob_name, upload_file, overwrite=True, metadata=metadata)
-        organized_allpages.append(blob_name)
-    print(f"\t Azure Blob Starageへ {original_filename} の書き込みが終わりました。", flush=True)
     return organized_allpages
 
 # Wordの*.docファイルを*.docxファイルに変換

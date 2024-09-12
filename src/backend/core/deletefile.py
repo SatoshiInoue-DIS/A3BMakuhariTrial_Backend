@@ -46,9 +46,11 @@ def getAllFiles(bot):
 
 # 指定したBlobデータをContainer内から論理的な削除をする
 def deleteBlob(files, container_name):
+    is_delete_files = []
     for blob in files:
         blob_client = blob_service.get_blob_client(container=container_name, blob=blob)
         blob_client.delete_blob()
+        is_delete_files.append(blob)
     return True
 
 # 検索インデックスから削除したBlobデータに紐づいたインデックスを削除する
