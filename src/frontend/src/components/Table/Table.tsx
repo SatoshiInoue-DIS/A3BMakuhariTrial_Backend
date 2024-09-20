@@ -135,10 +135,10 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
                 const response = await deleteApi(filename, bot, one_delete_id);
                 // checkProgressPromiseの結果を待つ
                 const progressResult = await checkProgressPromise;
-                const { progress, isComp } = progressResult;
+                const { progress, isComp, failed_files } = progressResult;
                 // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
-                if (progress < 100 && response.failed_files && response.failed_files?.length > 0) {
-                    const failed_files_string = response.failed_files || [];
+                if (progress < 100 && failed_files && failed_files?.length > 0) {
+                    const failed_files_string = failed_files || [];
                     if (failed_files_string.length > 0) {
                         addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name, undefined, failed_files_string);
                     }

@@ -73,14 +73,14 @@ const ProgressBar: React.FC<Props> = ({ progress, requestId, jobType, bot, isCom
                     const response = await uploadApi(formData);
                     // checkProgressPromiseの結果を待つ
                     const progressResult = await checkProgressPromise;
-                    const { progress, isComp } = progressResult;
+                    const { progress, isComp, failed_files } = progressResult;
                     // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
-                    if (progress < 100 && response.failed_files && response.failed_files.length > 0) {
+                    if (progress < 100 && failed_files && failed_files.length > 0) {
                         // また失敗したファイルがあれば
-                        const failed_files = response.failed_files || [];
-                        if (failed_files.length > 0) {
+                        const failedfiles = failed_files || [];
+                        if (failedfiles.length > 0) {
                             const failedFileObjects = currentShowFiles.filter(fileInfo =>
-                                failed_files.some(failedFile => failedFile === fileInfo.file.name)
+                                failedfiles.some(failedFile => failedFile === fileInfo.file.name)
                             );
                             // 失敗したファイルを更新
                             setCurrentShowFiles(failedFileObjects); 
@@ -107,11 +107,11 @@ const ProgressBar: React.FC<Props> = ({ progress, requestId, jobType, bot, isCom
                     const response = await deleteApi(filenames, bot, retry_id);
                     // checkProgressPromiseの結果を待つ
                     const progressResult = await checkProgressPromise;
-                    const { progress, isComp } = progressResult;
+                    const { progress, isComp, failed_files } = progressResult;
                     // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
-                    if (progress < 100 && response.failed_files && response.failed_files.length > 0) {
+                    if (progress < 100 && failed_files && failed_files.length > 0) {
                         // また失敗したファイルがあれば
-                        const failed_files_string = response.failed_files || [];
+                        const failed_files_string = failed_files || [];
                         // 失敗したファイルを更新
                         setCurrentShowFileName(failed_files_string)
                     }

@@ -12,7 +12,8 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "envFile": "",
-            "stopOnEntry":true
+            "stopOnEntry":true,
+            "subProcess": true
         },
         {
             "type": "chrome",

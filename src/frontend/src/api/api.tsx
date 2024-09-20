@@ -80,7 +80,7 @@ export function generateId() {
 }
 
 // 進行状況を確認する関数
-export const checkProgress = (requestId: string, setProgress: (progress: number) => void): Promise<{ progress: number; isComp: boolean }> => {
+export const checkProgress = (requestId: string, setProgress: (progress: number) => void): Promise<{ progress: number; isComp: boolean; failed_files: [] }> => {
     return new Promise((resolve, reject) => {
         const intervalId = setInterval(async () => {
             try {
@@ -94,7 +94,11 @@ export const checkProgress = (requestId: string, setProgress: (progress: number)
                 // 処理が完了したらポーリング停止
                 if (idComp) {
                     clearInterval(intervalId);
-                    resolve({ progress: statusData.progress, isComp: statusData.isComp });
+                    resolve({
+                        progress: statusData.progress,
+                        isComp: statusData.isComp,
+                        failed_files: statusData.failed_files
+                    });
                 }
             } catch (error) {
                 console.error("Error fetching progress:", error);

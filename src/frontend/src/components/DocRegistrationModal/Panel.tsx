@@ -9,8 +9,6 @@ import Trash from "public/trash.svg";
 import Image from "next/image";
 import { UploadRequest, uploadApi, generateId, checkProgress } from "../../api";
 import Router, { useRouter } from 'next/router'
-import e from "express";
-import { error } from "console";
 
 type Props = {  
     bot: string;  
@@ -160,13 +158,13 @@ const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
             const response = await uploadApi(formData);
             // checkProgressPromiseの結果を待つ
             const progressResult = await checkProgressPromise;
-            const { progress, isComp } = progressResult;
+            const { progress, isComp, failed_files } = progressResult;
             // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
-            if (progress < 100 && response.failed_files && response.failed_files?.length > 0) {
-                const failed_files = response.failed_files || [];
-                if (failed_files.length > 0) {
+            if (progress < 100 && failed_files && failed_files.length > 0) {
+                const failedfiles = failed_files || [];
+                if (failedfiles.length > 0) {
                     const failedFileObjects = currentShowFiles.filter(fileInfo =>
-                        failed_files.some(failedFile => failedFile === fileInfo.file.name)
+                        failedfiles.some(failedFile => failedFile === fileInfo.file.name)
                     );
                     addProgressPair(progress, upload_id, job_type, bot, isComp, first_file_name, failedFileObjects);
                 }
@@ -181,15 +179,6 @@ const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
             setIsLoading(false);
         }
     };
-
-    const comp = () => {
-        close
-        router.reload()
-    }
-
-    const ok = () => {
-        setIsLoading(false);
-    }
 
     return (
         <div className={Style.wrapper}>
@@ -299,7 +288,7 @@ const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
             ) : (
                 <>
                     <p>登録が完了しました。</p>
-                    <button type="button" onClick={comp}>OK</button>
+                    <button type="button" onClick={close}>OK</button>
                 </>
             )}
         </div>
