@@ -1,5 +1,6 @@
 import React from "react";
-import { useState, ReactNode, ReactElement } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
+import { useMsalAuth } from "../../auth/useMsalAuth";
 import Header from "../../components/Header";
 import SideNav from "../../components/SideNav";
 import styles from './Layout.module.css'
@@ -20,10 +21,22 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+    const loginUser: Promise<string | null> = useMsalAuth();
+    const [userName, setUserName] = useState<string>("anonymous");
     // 進行状況を表す
     const [progressPairs, setProgressPairs] = useState<ProgressPair[]>([]);
     // 処理が失敗したファイルを表す
     const [failedFiles, setFailedFiles] = useState<{ file: File; isUploaded: boolean }[]>([]);
+
+    useEffect(() => {
+        const fetchLoginUser = async () => {
+            const result = await loginUser;
+            if (result) {
+                setUserName(result)
+            }
+        }
+        fetchLoginUser(); // 非同期処理を呼び出し
+    }, [loginUser]);
 
     const addProgressPair = (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles: { file: File; isUploaded: boolean }[], failedFilesString?: string[]) => {  
         setProgressPairs(currentProgressPairs => {  
@@ -50,7 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     return (
         <div className={styles.outside}>
-            <Header title="アスリーブレインズBot管理画面" />
+            <Header title="アスリーブレインズBot管理画面" user={userName}/>
             <div className={styles.Layout}>
                 <SideNav progressPairs={progressPairs} />
                 <main className={styles.LayoutMain}>

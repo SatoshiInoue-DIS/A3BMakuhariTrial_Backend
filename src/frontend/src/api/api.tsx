@@ -1,10 +1,28 @@
 import { 
     UploadRequest, UploadResponse,
-    SevedFileRequest, SevedFileResponse, DeleteResponse
+    SavedFileRequest, SavedFileResponse, DeleteResponse, DecodedToken
 } from "./models";
 
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL
+
+export async function getLoginInfo(accessToken: string): Promise<DecodedToken> {
+    try {
+        const response = await fetch(`${apiUrl}/userinfo`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+
+        const userInfo: DecodedToken = await response.json();
+        return userInfo;
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error("Request timed out");
+        }
+        throw error; // その他のエラーはそのままスロー
+    }
+}
 
 //Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
 export async function deleteApi(options: {filename: string}[], bot:string, delete_id: string): Promise<DeleteResponse> {
@@ -112,13 +130,34 @@ export const checkProgress = (requestId: string, setProgress: (progress: number)
 };
 
 // Azure Blob Storageに登録してあるドキュメント情報を取得する
-export async function savedfileApi(options: SevedFileRequest): Promise<[]> {
+export async function savedfileApi(options: SavedFileRequest): Promise<[]> {
     const response = await fetch(`${apiUrl}/savedfile`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
         body: JSON.stringify({options})
+    });
+
+    const parsedResponse: [] = await response.json();
+    if (response.status > 299 || !response.ok) {
+        // throw Error(parsedResponse.length > 0 ? parsedResponse[0].error || "Unknown error" :  "Unknown error");
+    }
+
+    return parsedResponse;
+}
+
+// Azure Blob Storageに登録してあるドキュメントを検索する
+export async function searchfileApi(filename: string, bot:string,): Promise<[]> {
+    const response = await fetch(`${apiUrl}/searchfile`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            filename: filename,
+            bot: bot
+        })
     });
 
     const parsedResponse: [] = await response.json();

@@ -1,4 +1,4 @@
-import { SevedFileResponse, deleteApi, generateId, checkProgress } from "../../api";
+import { SavedFileResponse, deleteApi, generateId, checkProgress } from "../../api";
 
 import React, { forwardRef, useRef, useEffect, useState } from 'react';
 import { useTable, Column, useSortBy, useRowSelect } from 'react-table';
@@ -8,7 +8,7 @@ import Image from "next/image"
 
 type Props = {
     tableColumns: any;
-    files: SevedFileResponse[];
+    files: SavedFileResponse[];
 };
 
 type DocRegistrationProps = {  
@@ -57,21 +57,22 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
 IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
 
-const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp, addProgressPair }: 
+const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp, addProgressPair, onSelectionChange }: 
     { 
-        columns: Column<SevedFileResponse>[]; 
-        data: SevedFileResponse[]; 
-        callback: (selected: SevedFileResponse[]) => void; 
+        columns: Column<SavedFileResponse>[];
+        data: SavedFileResponse[];
+        callback: (selected: SavedFileResponse[]) => void;
         bot: string;
-        setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>; 
-        setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>; 
-        isDeleting:boolean; 
+        setIsDeleting: React.Dispatch<React.SetStateAction<boolean>>;
+        setDeleteComp: React.Dispatch<React.SetStateAction<boolean>>;
+        isDeleting:boolean;
         deleteComp:boolean;
         addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[] | undefined, failedFilesString?: string[] | undefined ) => void;
+        onSelectionChange: (isEnabled: boolean) => void;
     }) => {
     const router = useRouter()
     
-    const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SevedFileResponse>(
+    const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SavedFileResponse>(
         { columns, data }, useSortBy, useRowSelect,
         (hooks) => {
             hooks.visibleColumns.push((columns) => [
@@ -93,9 +94,9 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
                     Header: "削除",
                     Cell: ({ row }) => {
                         // 型アサーションを使用
-                        const fileNameComponent = row.original.filename as unknown as React.ReactElement;
-                        const fileName = (fileNameComponent.props.children[1] as React.ReactElement).props.children;
-                        // const fileName = row.original.filename.props.children[1].props.children;
+                        // const fileNameComponent = row.original.filename as unknown as React.ReactElement;
+                        // const fileName = (fileNameComponent.props.children[1] as React.ReactElement).props.children;
+                        const fileName = row.original.filename;
                         const fileArray = [{ filename: fileName }]
                         return (
                             <div>
@@ -108,6 +109,13 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
         }
     );
 
+    // `selectedRowIds` の変化に応じて `onSelectionChange` を呼び出す
+    useEffect(() => {
+        // ボタンの活性状態を判定する
+        const isButtonEnabled = Object.keys(selectedRowIds).length > 0;
+        onSelectionChange(isButtonEnabled);
+    }, [selectedRowIds, onSelectionChange]);
+    
     const OneDelete = ({ filename }: { filename: { filename: string }[] }) => {
         return (
             <button className={styles.one_del_btn} onClick={() => makeApiRequest(filename, bot, true, false)}>

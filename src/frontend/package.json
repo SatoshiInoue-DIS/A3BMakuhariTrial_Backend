@@ -10,11 +10,11 @@
     "export": "next export"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.26.1",
     "@fluentui/react": "^8.117.0",
     "@svgr/webpack": "^8.1.0",
     "@types/react-table": "^7.7.20",
     "express-form-data": "^2.0.23",
-    "next": "14.1.4",
     "react": "^18",
     "react-dom": "^18",
     "react-dropzone": "^14.2.3",
@@ -22,11 +22,13 @@
     "react-table": "^7.8.0"
   },
   "devDependencies": {
+    "@babel/preset-react": "^7.25.9",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
-    "eslint-config-next": "14.1.4",
+    "eslint-config-next": "^14.1.4",
+    "next": "^15.0.2",
     "typescript": "^5"
   }
 }

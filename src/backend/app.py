@@ -6,6 +6,8 @@ import re
 import multiprocessing
 from dotenv import load_dotenv
 
+import jwt
+import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -39,6 +41,8 @@ MAKUHARI_AZURE_SEARCH_INDEX = os.environ.get("MAKUHARI_AZURE_SEARCH_INDEX")
 SHINSOTSU_AZURE_SEARCH_INDEX = os.environ.get("SHINSOTSU_AZURE_SEARCH_INDEX")
 UNEI_AZURE_SEARCH_INDEX = os.environ.get("UNEI_AZURE_SEARCH_INDEX")
 
+AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID")
+
 # 処理の進行状況 グローバル変数 PROGRESS_STORE を Manager で管理
 if __name__ == '__main__':
     multiprocessing.set_start_method('spawn', True)
@@ -59,6 +63,41 @@ def get_container_name(botname):
         container_name = UNEI_CONTAINER
         search_index = UNEI_AZURE_SEARCH_INDEX
     return container_name, search_index
+
+def validate_token(token):
+    try:
+        # 1.公開鍵の一覧を取得
+        key_url = requests.get("https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration").json()["jwks_uri"]
+        keys = requests.get(key_url).json()["keys"]
+        # 2.IDトークンの署名を検証する公開鍵を抽出
+        header = jwt.get_unverified_header(token)
+        for key in keys:
+            # kidが一致している公開鍵を抽出
+            if key["kid"] == header["kid"]:
+                public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
+                break
+        # 3.IDトークンを検証
+        decoded_token = jwt.decode(
+            token,
+            public_key,
+            audience=AZURE_CLIENT_ID,
+            algorithms=["RS256"]
+        )
+        return decoded_token
+    # 検証に失敗した場合
+    except Exception as e:
+        print(f"Token validation error: {e}")
+        return None
+
+@app.route("/userinfo", methods=["GET"])  
+def userinfo():
+    auth_header = request.headers.get("Authorization")  
+    if auth_header:  
+        token = auth_header.split(" ")[1]  
+        user_info = validate_token(token)  
+        if user_info:  
+            return jsonify(user_info)  
+    return jsonify({"error": "Invalid token"}), 401
 
 # Azure Blob StorageとAzure AI Searchのインデックスに登録したドキュメントを削除する
 @app.route("/delete", methods=["POST"])
@@ -157,6 +196,22 @@ def savedfile():
     try:
         # コンテナー内の全データを取得
         saved_files_info = get_seved_file_info(container_name)
+        return jsonify(saved_files_info)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+#Azure Blob Storageに登録してあるドキュメントを検索する
+@app.route("/searchfile", methods=["POST"])
+def searchfile():
+    print(request.json["filename"], flush=True)
+    print(request.json["bot"], flush=True)
+    filename = request.json["filename"]
+    botname = request.json["bot"]
+    # 選択したボットからコンテナー名を取得する
+    container_name, search_index = get_container_name(botname)
+    try:
+        # コンテナーから名前に紐づいたファイルを取得
+        saved_files_info = get_search_file_info(container_name, filename)
         return jsonify(saved_files_info)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
