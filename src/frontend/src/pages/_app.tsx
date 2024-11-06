@@ -4,7 +4,6 @@ import Head from "next/head";
 import ReactDOM from "react-dom/client";
 import React from "react";
 
-import Home from "./index";
 import NoPage from "./NoPage";
 import Layout from "./Layout";
 
@@ -20,7 +19,7 @@ function App({ Component, pageProps }: AppProps) {
                 <meta charSet="UTF-8" />
                 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>アスリーブレインズBot管理画面</title>
+                <title>ドキュメント管理</title>
             </Head>
             <Layout>
                 <Component {...pageProps} />

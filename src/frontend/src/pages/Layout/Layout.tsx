@@ -63,7 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     return (
         <div className={styles.outside}>
-            <Header title="アスリーブレインズBot管理画面" user={userName}/>
+            <Header title="ドキュメント管理" user={userName}/>
             <div className={styles.Layout}>
                 <SideNav progressPairs={progressPairs} />
                 <main className={styles.LayoutMain}>

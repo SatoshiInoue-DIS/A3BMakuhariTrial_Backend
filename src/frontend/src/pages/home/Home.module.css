@@ -1,0 +1,110 @@
+.container {
+    height: calc(100vh - 100px);
+    margin: 10px;
+}
+
+.containerTable {
+    background-color: #E9F3FF;
+    border-radius: 15px;
+    box-shadow: 1px 1px 1px #000;
+    height: 100%;
+    padding-top: 1px;
+}
+
+.displayArea {
+    margin: 11px 10px 10px 10px;
+    background-color: #fff;
+    border-radius: 15px;
+    overflow-y: auto;
+    height: calc(100% - 20px);
+    width: calc(100% - 20px);
+    overflow-x: hidden;
+}
+
+.RecordingArea {
+    margin: 0 10px;
+    padding-top: 19px;
+}
+
+.RecordingArea>h3 {
+    font-size: 18px;
+    margin: 0;
+}
+
+.subTitle {
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 15px;
+    text-decoration:underline;
+    text-decoration-color: bisque;
+    text-decoration-thickness: 5px;
+    text-decoration-skip-ink: none;
+}
+
+.explainArea {
+    margin: 20px 20px;
+    font-size: 15px;
+}
+
+.border {
+    border-width: 1px 0 0 0;
+    border-style: solid;
+    margin: 0;
+}
+.standOutText1 {
+    background: #66AFB3;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 5px;
+}
+
+.standOutText2 {
+    color: #d6000b;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 5px;
+    text-decoration:underline;
+}
+
+.fileTypeBox {
+    list-style-type: circle;
+    margin: 0;
+    background: #E9F3FF;
+}
+
+.explainArea>p{
+    margin: 5px 0px;
+}
+.exampleBox {
+    margin: 5px 0px 15px;
+    background: #000;
+    color: #fff;
+    padding: 5px;
+    border-radius: 15px;
+}
+
+.example {
+    margin-left: 10px !important;
+}
+
+.note {
+    text-decoration:underline;
+}
+
+.exampleBefore {
+    margin: 10px 20px;
+}
+
+.exampleArrow {
+    margin: 10px 50px;
+}
+
+.exampleAfter {
+    margin: 10px 20px;
+}
+
+.subSummary {
+    margin: 20px 0px;
+    font-size: 15px;
+}

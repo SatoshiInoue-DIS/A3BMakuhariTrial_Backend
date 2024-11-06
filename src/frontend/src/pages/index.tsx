@@ -1,10 +1,11 @@
 import React from "react";
 import { initializeIcons } from "@fluentui/react";
+import Home from './home';
 
 initializeIcons();
 
-export default function Home({}) {
+export default function Index() {
     return (
-        <div></div>
+        <Home />
     )
 }
