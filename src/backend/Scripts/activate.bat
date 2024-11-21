@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\sinou\GitManagement\A3BMakuhariTrial_Backend\backend
+set VIRTUAL_ENV=C:\Users\Sdat5\Desktop\管理アプリ\src\backend
 
 if not defined PROMPT set PROMPT=$P$G
 

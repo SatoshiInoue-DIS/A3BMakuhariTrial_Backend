@@ -19,6 +19,7 @@ from core.deletefile import *
 
 # .envファイルの内容を読み込見込む
 load_dotenv()
+#ブランチコメント
 
 # configure_azure_monitor()
 app = Flask(__name__)
