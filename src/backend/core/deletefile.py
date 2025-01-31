@@ -12,6 +12,7 @@ from azure.search.documents.indexes.models import *
 from .savedfile import decode_metadata_value
 
 AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY")
 AZURE_STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
 AZURE_SEARCH_SERVICE_KEY = os.environ.get("AZURE_SEARCH_SERVICE_KEY")
 
@@ -20,12 +21,10 @@ load_dotenv()
 
 azure_credential = DefaultAzureCredential()
 
-
-
 # BlobServiceClientの作成
 blob_service = BlobServiceClient(
     account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net",
-    credential=azure_credential
+    credential=f"{AZURE_STORAGE_ACCOUNT_KEY}"
 )
 
 # Container内のすべてのBLOBを取得するし、名前だけを返す

@@ -51,7 +51,6 @@ export async function deleteApi(options: {filename: string}[], bot:string, delet
 
 // ドキュメントをAzure Blob Storageに登録及びAzure AI Searchの検索インデックスに登録
 export async function uploadApi(options: FormData): Promise<UploadResponse> {
-    console.log("options:" + options)
     const requestId = options.get("upload_id") as string
     try {
         // 進行状況を確認する

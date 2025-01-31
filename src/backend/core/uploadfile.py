@@ -38,6 +38,7 @@ SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
 AZURE_STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY")
 
 AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_SERVICE_KEY = os.environ.get("AZURE_SEARCH_SERVICE_KEY")
@@ -58,19 +59,19 @@ azure_credential = DefaultAzureCredential()
 # BlobServiceClientの作成
 blob_service = BlobServiceClient(
     account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net",
-    credential=azure_credential
+    credential=f"{AZURE_STORAGE_ACCOUNT_KEY}"
 )
 azd_credential = AzureDeveloperCliCredential(tenant_id=AZURE_TENANT_ID, process_timeout=60)
 # default_creds = azd_credential
 search_creds = AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
-# search_creds = AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
 # formrecognizer_creds = default_creds
 formrecognizer_creds = search_creds
 default_creds = ManagedIdentityCredential()
 
+search_index_creds = AzureKeyCredential(AZURE_SEARCH_SERVICE_KEY)
 index_client = SearchIndexClient(
     endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net/",
-    credential=azure_credential
+    credential=search_index_creds
 )
 
 indexers_client = SearchIndexerClient(

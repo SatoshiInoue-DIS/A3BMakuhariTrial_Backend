@@ -62,7 +62,7 @@ const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
                     await Promise.all(filteringFiles.map((file) => onUploadFile(file)));
                 } catch (error) {
                     // ↓ここでエラーに関するユーザーへの通知や処理を行う
-                    alert(`アップロード中にエラーが発生しました: ${error}`);
+                    alert(`アップロード中にエラーが発生しました2: ${error}`);
                 }
             }
         },
@@ -174,7 +174,7 @@ const Panel: NextPage<Props> = ({ bot, addProgressPair, close }) => {
             setUploadComp(response.answer);
         } catch (e) {
             // setError(e);
-            alert(`アップロード中にエラーが発生しました: ${e}`);
+            alert(`アップロード中にエラーが発生しました3: ${e}`);
         } finally {
             setIsLoading(false);
         }
