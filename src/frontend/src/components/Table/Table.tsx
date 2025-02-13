@@ -1,6 +1,6 @@
 import { SavedFileResponse, deleteApi, generateId, checkProgress } from "../../api";
 
-import React, { forwardRef, useRef, useEffect, useState } from 'react';
+import React, { forwardRef, useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useTable, Column, useSortBy, useRowSelect } from 'react-table';
 import Router, { useRouter } from 'next/router';
 import styles from './Table.module.css';
@@ -56,6 +56,30 @@ const IndeterminateCheckbox = forwardRef<HTMLInputElement, IIndeterminateInputPr
 
 IndeterminateCheckbox.displayName = 'IndeterminateCheckbox';
 
+// OneDelete コンポーネント
+const OneDelete = ({ 
+    filename, 
+    bot,
+    makeApiRequest 
+}: { 
+    filename: { filename: string }[];
+    bot: string;
+    makeApiRequest: (filename: { filename: string }[], bot: string, isOne: boolean, isComp: boolean) => void;
+}) => {
+    return (
+        <button 
+            className={styles.one_del_btn} 
+            onClick={() => makeApiRequest(filename, bot, true, false)}
+        >
+            <Image 
+            src="./garbage_can_icon.png" 
+            width={20} 
+            height={20} 
+            alt="garbage_can_icon"
+            />
+        </button>
+    );
+};
 
 const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isDeleting, deleteComp, addProgressPair, onSelectionChange }: 
     { 
@@ -70,97 +94,88 @@ const Table = ({ columns, data, callback, bot, setIsDeleting, setDeleteComp, isD
         addProgressPair: (progress: number, requestId: string, jobType: string, bot: string, isComp: boolean, fileName: string, failedFiles?: { file: File; isUploaded: boolean }[] | undefined, failedFilesString?: string[] | undefined ) => void;
         onSelectionChange: (isEnabled: boolean) => void;
     }) => {
-    const router = useRouter()
+        const [deleteProgress, setDeleteProgress] = useState<number>(0);
+        const router = useRouter();
+        const makeApiRequest = useCallback(async (filename: {filename: string}[], bot: string, isdel: boolean, delcom: boolean) => {
+            const executePermission = confirm(bot + "から" + filename[0].filename + "を本当に削除しますか？")
+            if (executePermission) {
+                const job_type = "oneDelete"
+                const one_delete_id = generateId()
+                try {
+                    // fileの名前を取得
+                    const file_name = filename.length > 0 ? filename[0].filename : "";
+                    addProgressPair(0, one_delete_id, job_type, bot, false, file_name);
+                    // 進行状況の確認を開始
+                    const checkProgressPromise = checkProgress(one_delete_id, (newProgress: number) => {  
+                        setDeleteProgress(newProgress);  
+                        addProgressPair(newProgress, one_delete_id, job_type, bot, false, file_name);
+                    });
+                    const response = await deleteApi(filename, bot, one_delete_id);
+                    // checkProgressPromiseの結果を待つ
+                    const progressResult = await checkProgressPromise;
+                    const { progress, isComp, failed_files } = progressResult;
+                    // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
+                    if (progress < 100 && failed_files && failed_files?.length > 0) {
+                        const failed_files_string = failed_files || [];
+                        if (failed_files_string.length > 0) {
+                            addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name, undefined, failed_files_string);
+                        }
+                    } else {
+                        addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name);
+                    }
+                } catch (e) {
+                    alert(`削除処理中にエラーが発生しました: ${e}`);
+                }
+            }
+        }, [addProgressPair]);
+
+    // カラムの定義を useMemo でメモ化し、bot の値が変更されたら再計算されるようにする
+    const memoizedColumns = useMemo(() => [
+        {
+            id: 'selection',
+            Header: ({ getToggleAllRowsSelectedProps }: { getToggleAllRowsSelectedProps: any }) => (
+                <div>
+                    <IndeterminateCheckbox 
+                    name={''} 
+                    {...getToggleAllRowsSelectedProps()} 
+                    />
+                </div>
+            ),
+            Cell: ({ row }: { row: any }) => (
+                <div>
+                    <IndeterminateCheckbox {...row.getToggleRowSelectedProps()} />
+                </div>
+            ),
+        },
+        ...columns,
+        {
+            Header: "削除",
+            Cell: ({ row }: { row: any }) => {
+                const fileName = row.original.filename;
+                const fileArray = [{ filename: fileName }];
+                return (
+                    <div>
+                        <OneDelete 
+                            filename={fileArray}
+                            bot={bot}
+                            makeApiRequest={makeApiRequest}
+                        />
+                    </div>
+                );
+            }
+        }
+    ], [columns, bot, makeApiRequest]); // bot を依存配列に追加
     
     const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow, selectedFlatRows, state: { selectedRowIds } } = useTable<SavedFileResponse>(
-        { columns, data }, useSortBy, useRowSelect,
-        (hooks) => {
-            hooks.visibleColumns.push((columns) => [
-                {
-                    id: 'selection',
-                    Header: ({ getToggleAllRowsSelectedProps }) => (
-                        <div>
-                            <IndeterminateCheckbox name={''} {...getToggleAllRowsSelectedProps()} />
-                        </div>
-                    ),
-                    Cell: ({ row }: { row: any }) => (
-                        <div>
-                            <IndeterminateCheckbox {...row.getToggleRowSelectedProps()} />
-                        </div>
-                    ),
-                },
-                ...columns,
-                {
-                    Header: "削除",
-                    Cell: ({ row }) => {
-                        // 型アサーションを使用
-                        // const fileNameComponent = row.original.filename as unknown as React.ReactElement;
-                        // const fileName = (fileNameComponent.props.children[1] as React.ReactElement).props.children;
-                        const fileName = row.original.filename;
-                        const fileArray = [{ filename: fileName }]
-                        return (
-                            <div>
-                                <OneDelete filename={fileArray}/>
-                            </div>
-                        );
-                    }
-                }
-            ]);
-        }
-    );
-
-    // `selectedRowIds` の変化に応じて `onSelectionChange` を呼び出す
+        { columns: memoizedColumns, data }, useSortBy, useRowSelect);
     useEffect(() => {
-        // ボタンの活性状態を判定する
         const isButtonEnabled = Object.keys(selectedRowIds).length > 0;
         onSelectionChange(isButtonEnabled);
     }, [selectedRowIds, onSelectionChange]);
-    
-    const OneDelete = ({ filename }: { filename: { filename: string }[] }) => {
-        return (
-            <button className={styles.one_del_btn} onClick={() => makeApiRequest(filename, bot, true, false)}>
-                <Image src="./garbage_can_icon.png" width={20} height={20} alt="garbage_can_icon"></Image>
-            </button>
-        )
-    }
-    
-    const [deleteProgress, setDeleteProgress] = useState<number>(0);
 
-    const makeApiRequest = async (filename: {filename: string}[], bot: string, isdel: boolean, delcom: boolean) => {
-        const executePermission = confirm("本当に削除しますか？")
-        if (executePermission) {
-            const job_type = "oneDelete"
-            const one_delete_id = generateId()
-            try {
-                // fileの名前を取得
-                const file_name = filename.length > 0 ? filename[0].filename : "";
-                addProgressPair(0, one_delete_id, job_type, bot, false, file_name);
-                // 進行状況の確認を開始
-                const checkProgressPromise = checkProgress(one_delete_id, (newProgress: number) => {  
-                    setDeleteProgress(newProgress);  
-                    addProgressPair(newProgress, one_delete_id, job_type, bot, false, file_name);
-                });
-                const response = await deleteApi(filename, bot, one_delete_id);
-                // checkProgressPromiseの結果を待つ
-                const progressResult = await checkProgressPromise;
-                const { progress, isComp, failed_files } = progressResult;
-                // 進行状況が100未満かつ、失敗したファイルが存在するかを確認
-                if (progress < 100 && failed_files && failed_files?.length > 0) {
-                    const failed_files_string = failed_files || [];
-                    if (failed_files_string.length > 0) {
-                        addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name, undefined, failed_files_string);
-                    }
-                } else {
-                    addProgressPair(progress, one_delete_id, job_type, bot, isComp, file_name);
-                }
-            } catch (e) {
-                alert(`削除処理中にエラーが発生しました: ${e}`);
-            } finally {
-            }
-        }
-    };
-    
-    useEffect(() => { callback(selectedFlatRows.map((d) => d.original)); }, [callback, selectedFlatRows]);
+    useEffect(() => {
+        callback(selectedFlatRows.map((d) => d.original));
+    }, [callback, selectedFlatRows]);
     
     return (
         <>

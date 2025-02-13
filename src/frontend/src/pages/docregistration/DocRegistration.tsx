@@ -214,7 +214,7 @@ const DocRegistration: React.FC<DocRegistrationProps> = ({ addProgressPair }) =>
     const [deleteProgress, setDeleteProgress] = useState<number>(0);
 
     const makeApiRequest = async (filename: {filename: string}[], bot:string, isDeleting:boolean, deleteComp:boolean) => {
-        const executePermission = confirm("本当に削除しますか？")
+        const executePermission = confirm(bot + "から" + filename[0].filename + "等を本当に削除しますか？")
         if (executePermission) {
             setIsDeletingParent(isDeleting);
             setDeleteCompParent(deleteComp);
