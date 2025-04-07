@@ -8,7 +8,11 @@ import { stringify } from 'querystring';
 import path from "path";
 import Image from "next/image"
 
-const bots = ["幕張トライアル", "A3B_FAQ(IT基礎&開発基礎)", "A3B_FAQ(新卒OPEN)", "QLink", "テスト"];
+const bot1 = process.env.NEXT_PUBLIC_KD_PHASE2
+const bot2 = process.env.NEXT_PUBLIC_LEVEL1
+const bot3 = process.env.NEXT_PUBLIC_QLINK
+
+const bots = [bot1, bot2, bot3];
 
 type FileType = 'PDF' | 'WORD' | 'EXCEL' | "POWERPOINT" | "JPG" | "PNG" | "TEXT";
 
@@ -149,7 +153,7 @@ type DocRegistrationProps = {
 };
 
 const DocRegistration: React.FC<DocRegistrationProps> = ({ addProgressPair }) => {
-    const [selectedOption, setSelectedOption] = useState<string>('A3B_FAQ(IT基礎&開発基礎)')
+    const [selectedOption, setSelectedOption] = useState<string>('A3B_FAQ(Level1)')
     const [fileinfo, setFileinfo] = useState<SavedFileResponse[]>([]);
     const [selectedRows, setSelectedRows] = useState<Array<SavedFileResponse>>([]);
     const [selectedFilenames, setSelectedFilenames] = useState<{ filename: string }[]>([{ filename: "" }]);

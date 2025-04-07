@@ -29,20 +29,20 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 CORS(app)
 FlaskInstrumentor().instrument_app(app)
 
-MAKUHARI = os.environ.get("MAKUHARI")
-IT_BASICS_AND_DEVELOPMENT_BASICS = os.environ.get("IT_BASICS_AND_DEVELOPMENT_BASICS")
+KD_PHASE2 = os.environ.get("KD_PHASE2")
+LEVEL1 = os.environ.get("LEVEL1")
 NEW_GRADUATES = os.environ.get("NEW_GRADUATES")
 QLINK = os.environ.get("QLINK")
 TEST = os.environ.get("TEST")
 
-MAKUHARI_CONTAINER = os.environ.get("MAKUHARI_CONTAINER")
-IT_BASICS_AND_DEVELOPMENT_BASICS_CONTAINER = os.environ.get("IT_BASICS_AND_DEVELOPMENT_BASICS_CONTAINER")
+KD_PHASE2_CONTAINER = os.environ.get("KD_PHASE2_CONTAINER")
+LEVEL1_CONTAINER = os.environ.get("LEVEL1_CONTAINER")
 NEW_GRADUATES_CONTAINER = os.environ.get("NEW_GRADUATES_CONTAINER")
 QLINK_CONTAINER = os.environ.get("QLINK_CONTAINER")
 TEST_CONTAINER = os.environ.get("TEST_CONTAINER")
 
-MAKUHARI_AZURE_SEARCH_INDEX = os.environ.get("MAKUHARI_AZURE_SEARCH_INDEX")
-IT_BASICS_AND_DEVELOPMENT_BASICS_AZURE_SEARCH_INDEX = os.environ.get("IT_BASICS_AND_DEVELOPMENT_BASICS_AZURE_SEARCH_INDEX")
+KD_PHASE2_AZURE_SEARCH_INDEX = os.environ.get("KD_PHASE2_AZURE_SEARCH_INDEX")
+LEVEL1_AZURE_SEARCH_INDEX = os.environ.get("LEVEL1_AZURE_SEARCH_INDEX")
 NEW_GRADUATES_AZURE_SEARCH_INDEX = os.environ.get("NEW_GRADUATES_AZURE_SEARCH_INDEX")
 QLINK_AZURE_SEARCH_INDEX = os.environ.get("QLINK_AZURE_SEARCH_INDEX")
 TEST_AZURE_SEARCH_INDEX = os.environ.get("TEST_AZURE_SEARCH_INDEX")
@@ -59,26 +59,18 @@ if __name__ == '__main__':
 TASKS = {}
 # 選択したボットからコンテナー名を取得する
 def get_container_name(botname):
-    # 幕張トライアル
-    if botname == MAKUHARI:
-        container_name = MAKUHARI_CONTAINER
-        search_index = MAKUHARI_AZURE_SEARCH_INDEX
-    # A3B_FAQ(IT基礎&開発基礎)
-    elif botname == IT_BASICS_AND_DEVELOPMENT_BASICS:
-        container_name = IT_BASICS_AND_DEVELOPMENT_BASICS_CONTAINER
-        search_index = IT_BASICS_AND_DEVELOPMENT_BASICS_AZURE_SEARCH_INDEX
-    # A3B_FAQ(新卒OPEN)
-    elif botname == NEW_GRADUATES:
-        container_name = NEW_GRADUATES_CONTAINER
-        search_index = NEW_GRADUATES_AZURE_SEARCH_INDEX
+    # 導入研修Phase2_FAQ
+    if botname == KD_PHASE2:
+        container_name = KD_PHASE2_CONTAINER
+        search_index = KD_PHASE2_AZURE_SEARCH_INDEX
+    # A3B_FAQ(Level1)
+    elif botname == LEVEL1:
+        container_name = LEVEL1_CONTAINER
+        search_index = LEVEL1_AZURE_SEARCH_INDEX
     # QLink
     elif botname == QLINK:
         container_name = QLINK_CONTAINER
         search_index = QLINK_AZURE_SEARCH_INDEX
-    # テスト
-    elif botname == TEST:
-        container_name = TEST_CONTAINER
-        search_index = TEST_AZURE_SEARCH_INDEX
     return container_name, search_index
 
 def validate_token(token):
